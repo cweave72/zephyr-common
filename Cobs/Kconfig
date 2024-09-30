@@ -1,0 +1,5 @@
+config COBS
+	bool "Enable the COBS (Consistent Overhead Byte Stuffing) Library"
+	default n
+	help
+		Encoder and decoder for framing serial streams.
