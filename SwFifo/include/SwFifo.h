@@ -27,7 +27,7 @@ typedef struct SwFifo
     /** @brief flag indicating fifo should be threadsafe. */
     bool threadsafe;
     /** @brief Lock mutex */
-    RTOS_MUTEX lock;
+    //RTOS_MUTEX lock;
     /** @brief Memory for the fifo (allocated on init). */
     uint8_t *mem;
 } SwFifo;

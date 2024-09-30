@@ -67,7 +67,7 @@ do {                                        \
 #define unlock(pf)
 #endif
 
-#define MIN(a, b)   (((a)<(b)) ? (a) : (b))
+#define LOCAL_MIN(a, b)   (((a)<(b)) ? (a) : (b))
 
 /** @brief Computes the adjusted memory size. */
 #define MEM_SIZE(f, num)    ((num)*(f)->itemSize)
@@ -91,7 +91,7 @@ circWrite(SwFifo *fifo, void *data, uint32_t num)
         /* Write to the last avail memory location prior to wrap. */
         memcpy(p, data, MEM_SIZE(fifo, numToWrap));
         /* Complete the write from the beginning of the circular mem. */
-        memcpy(fifo->mem, data + numToWrap, MEM_SIZE(fifo, num-numToWrap));
+        memcpy(fifo->mem, (uint8_t *)data + numToWrap, MEM_SIZE(fifo, num-numToWrap));
     }
     else
     {
@@ -119,7 +119,7 @@ circRead(SwFifo *fifo, void *data, uint32_t num)
         /* Read up to the last avail memory location prior to wrap. */
         memcpy(data, p, MEM_SIZE(fifo, numToWrap));
         /* Complete the read from the beginning of the circular mem. */
-        memcpy(data + numToWrap, fifo->mem, MEM_SIZE(fifo, num-numToWrap));
+        memcpy((uint8_t *)data + numToWrap, fifo->mem, MEM_SIZE(fifo, num-numToWrap));
     }
     else
     {
@@ -234,7 +234,7 @@ SwFifo_write(SwFifo *fifo, void *items, uint32_t num)
 uint32_t
 SwFifo_peek(SwFifo *fifo, void *dst, uint32_t num)
 {
-    uint32_t numToRead = MIN(num, count(fifo));
+    uint32_t numToRead = LOCAL_MIN(num, count(fifo));
 
     lock(fifo);
     if (isEmpty(fifo))
@@ -360,7 +360,7 @@ SwFifo_init(
     fifo->depth    = depth;
     fifo->itemSize = itemSize;
     fifo->threadsafe = threadsafe;
-    fifo->lock = NULL;
+    //fifo->lock = NULL;
 
     /* Init the index pointers, */
     fifo->wrIdx = 0;
@@ -382,8 +382,8 @@ SwFifo_init(
 
     if (fifo->threadsafe)
     {
-        fifo->lock = RTOS_MUTEX_CREATE();
-        CHECK_COND_RETURN_MSG(!fifo->lock, -1, "Could not create mutex");
+        //fifo->lock = RTOS_MUTEX_CREATE();
+        //CHECK_COND_RETURN_MSG(!fifo->lock, -1, "Could not create mutex");
     }
 
     return 0;
