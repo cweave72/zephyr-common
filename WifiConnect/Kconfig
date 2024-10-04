@@ -1,0 +1,5 @@
+config WIFICONNECT
+	bool "Enable the WifiConnect lib"
+	default n
+	help
+		Connect to local wifi network.

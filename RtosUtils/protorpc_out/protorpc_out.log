@@ -1,0 +1,37 @@
+[  INFO] (generator.py:283) Running protorpc generator plugin.
+[ DEBUG] (generator.py:288) proto_file.name=google/protobuf/descriptor.proto: ['TestRpc.proto']
+[ DEBUG] (generator.py:288) proto_file.name=nanopb.proto: ['TestRpc.proto']
+[ DEBUG] (generator.py:288) proto_file.name=TestRpc.proto: ['TestRpc.proto']
+[  INFO] (generator.py:290) Processing file TestRpc.proto
+[ DEBUG] (generator.py:202) proto_path=TestRpc.proto
+[ DEBUG] (generator.py:203) syntax=proto3
+[ DEBUG] (generator.py:204) depends=['nanopb.proto']
+[ DEBUG] (generator.py:205) package=test
+[ DEBUG] (generator.py:206) enums=[]
+[ DEBUG] (generator.py:211) msg: Add_call
+[ DEBUG] (generator.py:240)    field[1]: a optional (type=int32 )
+[ DEBUG] (generator.py:240)    field[2]: b optional (type=int32 )
+[ DEBUG] (generator.py:211) msg: Add_reply
+[ DEBUG] (generator.py:240)    field[1]: sum optional (type=int32 )
+[ DEBUG] (generator.py:211) msg: HandlerError_call
+[ DEBUG] (generator.py:211) msg: HandlerError_reply
+[ DEBUG] (generator.py:211) msg: SetStruct_call
+[ DEBUG] (generator.py:240)    field[1]: var_int32 optional (type=int32 )
+[ DEBUG] (generator.py:240)    field[2]: var_uint32 optional (type=uint32 )
+[ DEBUG] (generator.py:240)    field[3]: var_int64 optional (type=int64 )
+[ DEBUG] (generator.py:240)    field[4]: var_uint64 optional (type=uint64 )
+[ DEBUG] (generator.py:240)    field[5]: var_uint32_array repeated (type=uint32 )
+[ DEBUG] (generator.py:240)    field[6]: var_bool optional (type=bool )
+[ DEBUG] (generator.py:240)    field[7]: var_string optional (type=string )
+[ DEBUG] (generator.py:240)    field[8]: var_bytes optional (type=bytes )
+[ DEBUG] (generator.py:211) msg: SetStruct_reply
+[ DEBUG] (generator.py:211) msg: TestCallset
+[ DEBUG] (generator.py:216) oneof: msg
+[ DEBUG] (generator.py:224)    field[1]: add_call optional (type=message .test.Add_call)
+[ DEBUG] (generator.py:224)    field[3]: setstruct_call optional (type=message .test.SetStruct_call)
+[ DEBUG] (generator.py:224)    field[5]: handlererror_call optional (type=message .test.HandlerError_call)
+[ DEBUG] (generator.py:249) handlers=[Handler(package='test', callset_type='test_TestCallset', call_name='add_call', call_type='test_Add_call', call_fields=[FieldType(name[  INFO] (generator.py:293) Output file --> RtosUtilsRpc.c
+[  INFO] (generator.py:293) Output file --> RtosUtilsRpc.h
+'int32', label='')]), Handler(package='test', callset_type='test_TestCallset', call_name='setstruct_call', call_type='test_SetStruct_call', call_fields=[FieldType(name='var_int32', type='int32', label=''), FieldType(name='var_uint32', type='uint32', label=''), FieldType(name='var_int64', type='int64', label=''), FieldType(name='var_uint64', type='uint64', label=''), FieldType(name='var_uint32_array', type='uint32', label='[repeated]'), FieldType(name='var_bool', type='bool', label=''), FieldType(name='var_string', type='string', label=''), FieldType(name='var_bytes', type='bytes', label='')], reply_fields=[]), Handler(package='test', callset_type='test_TestCallset', call_name='handlererror_call', call_type='test_HandlerError_call', call_fields=[], reply_fields=[])]
+[  INFO] (generator.py:293) Output file --> TestRpc.c
+[  INFO] (generator.py:293) Output file --> TestRpc.h

@@ -1,1 +1,2 @@
 rsource "Cobs/Kconfig"
+rsource "WifiConnect/Kconfig"

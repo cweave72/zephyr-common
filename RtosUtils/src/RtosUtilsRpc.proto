@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+import 'nanopb.proto';
+
+package rtos;
+
+enum TaskState {
+    running   = 0;
+    ready     = 1;
+    blocked   = 2;
+    suspended = 3;
+    deleted   = 4;
+    invalid   = 5;
+}
+
+message TaskInfo {
+    /* Task name */
+    string name = 1 [(nanopb).max_size = 16];
+    /* Task unique number */
+    uint32 number = 2;
+    /* State */
+    TaskState state = 3;
+    /* Priority */
+    uint32 prio = 4;
+    /* Runtime count */
+    uint32 rtc = 5;
+    /* Stack remaining (aka high watermark) */
+    uint32 stack_remaining = 6;
+    /* Core number */
+    int32 core_num = 7;
+}
+
+/* Get information on all rtos tasks. */
+message GetSystemTasks_call {}
+message GetSystemTasks_reply {
+    /* Total run time */
+    uint64 run_time = 1;
+    repeated TaskInfo task_info = 2 [(nanopb).max_count = 16];
+}
+
+message RtosUtilsCallset {
+    oneof msg {
+        GetSystemTasks_call getSystemTasks_call = 1;
+        GetSystemTasks_reply getSystemTasks_reply = 2;
+    }
+}
