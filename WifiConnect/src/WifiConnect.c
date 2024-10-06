@@ -38,7 +38,6 @@ handle_connect_result(struct net_mgmt_event_callback *cb)
     }
     else
     {
-        LOG_INF("Connected");
         RTOS_FLAGS_SET(&wifi_flags, FLAG_CONNECTED);
     }
 }
@@ -50,7 +49,7 @@ handle_disconnect_result(struct net_mgmt_event_callback *cb)
 
     if (status->status)
     {
-        LOG_INF("Disconnection request (%d)", status->status);
+        LOG_ERR("Error on disconnect (%d)", status->status);
     }
     else
     {
@@ -126,7 +125,7 @@ connect(const char *ssid, const char *pass)
     wifi_params.ssid_length = strlen(ssid);
     wifi_params.psk_length = strlen(pass);
     wifi_params.channel = WIFI_CHANNEL_ANY;
-    wifi_params.security = WIFI_SECURITY_TYPE_WPA_AUTO_PERSONAL;
+    wifi_params.security = WIFI_SECURITY_TYPE_PSK;
     wifi_params.band = WIFI_FREQ_BAND_2_4_GHZ; 
     wifi_params.mfp = WIFI_MFP_OPTIONAL;
 
@@ -156,8 +155,6 @@ status(void)
         LOG_ERR("WiFi Status Request Failed");
     }
 
-    printk("\n");
-
     if (status.state >= WIFI_STATE_ASSOCIATED) {
         LOG_INF("SSID: %-32s", status.ssid);
         LOG_INF("Band: %s", wifi_band_txt(status.band));
@@ -178,6 +175,29 @@ static void disconnect(void)
 }
 
 /******************************************************************************
+    [docimport WifiConnect_getState]
+*//**
+    @brief Gets the current interface state.
+******************************************************************************/
+bool
+WifiConnect_getState(void)
+{
+    struct net_if *iface = net_if_get_default();
+    struct wifi_iface_status status = {0};
+
+    if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS,
+                 iface,
+                 &status,
+                 sizeof(struct wifi_iface_status)))
+    {
+        LOG_ERR("WiFi Status Request Failed");
+        return -1;
+    }
+
+    return (status.state >= WIFI_STATE_ASSOCIATED) ? true : false;
+}
+
+/******************************************************************************
     [docimport WifoConnect_connect]
 *//**
     @brief Performs a connection request.
@@ -194,20 +214,26 @@ WifiConnect_connect(const char *ssid, const char *pass)
         WifiConnect_init();
     }
     
+    LOG_INF("Staring Wifi connection process.");
+    RTOS_TASK_SLEEP_ms(3000);
+
     connect(ssid, pass);
-    LOG_DBG("Waiting for connection...");
+    LOG_INF("Waiting for connection...");
 
     flags = RTOS_PEND_ALL_FLAGS_MS(
         &wifi_flags,
         FLAG_CONNECTED | FLAG_IP_OBTAINED,
-        1000);
+        10000);
     if (flags == 0)
     {
         LOG_ERR("Timeout on connection request.");
         return -1;
     }
     RTOS_FLAGS_CLR(&wifi_flags, FLAG_CONNECTED | FLAG_IP_OBTAINED);
+
     status();
+    LOG_INF("Wifi successfully connected.");
+
     return 0;
 }
 
@@ -219,8 +245,6 @@ WifiConnect_connect(const char *ssid, const char *pass)
 void
 WifiConnect_init(void)
 {
-    LOG_INF("Staring Wifi connection process.\n");
-
     net_mgmt_init_event_callback(
         &wifi_cb,
         event_handler,

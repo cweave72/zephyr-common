@@ -170,7 +170,7 @@ Example:
 })
 
 /* Set Flags */
-#define RTOS_FLAGS_SET(grp, eflags)     k_event_set((grp), (eflags))
+#define RTOS_FLAGS_SET(grp, eflags)     k_event_post((grp), (eflags))
 
 /* Clear Flags */
 #define RTOS_FLAGS_CLR(grp, eflags)     k_event_clear((grp), (eflags))

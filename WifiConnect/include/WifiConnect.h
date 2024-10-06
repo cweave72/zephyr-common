@@ -9,6 +9,14 @@
 
 
 /******************************************************************************
+    [docexport WifiConnect_getState]
+*//**
+    @brief Gets the current interface state.
+******************************************************************************/
+bool
+WifiConnect_getState(void);
+
+/******************************************************************************
     [docexport WifoConnect_connect]
 *//**
     @brief Performs a connection request.
