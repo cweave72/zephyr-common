@@ -1,5 +1,6 @@
 add_subdirectory(Cobs)
 add_subdirectory(CheckCond)
 add_subdirectory(SwFifo)
+add_subdirectory(SwTimer)
 add_subdirectory(RtosUtils)
 add_subdirectory(WifiConnect)
