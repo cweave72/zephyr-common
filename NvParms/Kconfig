@@ -1,0 +1,15 @@
+config NVPARMS
+	bool "Enable NvParms module."
+	default n
+	depends on FLASH
+	depends on FLASH_MAP
+	depends on NVS
+	depends on SETTINGS
+	depends on SETTINGS_RUNTIME
+	depends on SETTINGS_NVS
+	help
+		An abstration for getting parameter settings from NVS.
+
+module = NVPARMS
+module-str = "NvParms"
+source "subsys/logging/Kconfig.template.log_config"

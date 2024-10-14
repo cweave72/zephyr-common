@@ -1,2 +1,6 @@
 rsource "Cobs/Kconfig"
 rsource "WifiConnect/Kconfig"
+rsource "TcpSocket/Kconfig"
+rsource "TcpServer/Kconfig"
+rsource "TcpEcho/Kconfig"
+rsource "NvParms/Kconfig"

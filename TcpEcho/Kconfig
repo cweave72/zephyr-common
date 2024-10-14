@@ -1,0 +1,7 @@
+config TCPECHO
+	bool "Enable the TcpEcho server lib"
+	default n
+
+module = TCPECHO
+module-str = "TcpEcho"
+source "subsys/logging/Kconfig.template.log_config"

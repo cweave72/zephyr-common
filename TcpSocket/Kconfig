@@ -1,0 +1,13 @@
+config TCPSOCKET
+	bool "Enable TcpSocket module."
+	default n
+	depends on NETWORKING
+	depends on NET_TCP
+	depends on POSIX_API
+	depends on POSIX_NETWORKING
+	help
+		An abstration for socket functionality.
+
+module = TCPSOCKET
+module-str = "TcpSocket"
+source "subsys/logging/Kconfig.template.log_config"

@@ -1,5 +1,15 @@
 config WIFICONNECT
 	bool "Enable the WifiConnect lib"
 	default n
+	depends on WIFI
+	depends on NETWORKING
+	depends on NET_L2_WIFI_MGMT
+	depends on NET_L2_ETHERNET
+	depends on NET_IPV4
+	depends on NET_DHCPV4
 	help
 		Connect to local wifi network.
+
+module = WIFICONNECT
+module-str = "WifiConnect"
+source "subsys/logging/Kconfig.template.log_config"

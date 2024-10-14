@@ -14,7 +14,7 @@
 #include "RtosUtils.h"
 
 /** @brief Initialize the logging module. */
-LOG_MODULE_REGISTER(WifiConnect, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(WifiConnect, CONFIG_WIFICONNECT_LOG_LEVEL);
 
 #define FLAG_CONNECTED      ((uint32_t)0x1 << 0)
 #define FLAG_DISCONNECTED   ((uint32_t)0x1 << 1)
@@ -214,11 +214,11 @@ WifiConnect_connect(const char *ssid, const char *pass)
         WifiConnect_init();
     }
     
-    LOG_INF("Staring Wifi connection process.");
+    LOG_DBG("Staring Wifi connection process.");
     RTOS_TASK_SLEEP_ms(3000);
 
     connect(ssid, pass);
-    LOG_INF("Waiting for connection...");
+    LOG_DBG("Waiting for connection...");
 
     flags = RTOS_PEND_ALL_FLAGS_MS(
         &wifi_flags,

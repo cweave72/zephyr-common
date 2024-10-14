@@ -1,6 +1,6 @@
 /*******************************************************************************
  *  @file: RtosUtils.h
- *   
+ *
  *  @brief: Header for RtosUtils.
 *******************************************************************************/
 #ifndef RTOSUTILS_H
@@ -10,13 +10,26 @@
 #include <zephyr/sys/time_units.h>
 #include <zephyr/logging/log.h>
 
-/** @brief Define a task's stack. */
-#define RTOS_TASK_STACK_DEFINE(name, size)  K_THREAD_STACK_DEFINE((name), (size))
-/** @brief Task type. */
-#define RTOS_TASK   struct k_thread
+/** @brief Task entry function. */
+typedef void RTOS_TASK_ENTRY(void *arg0, void *arg1, void *arg2);
 
-/** @brief Task creation.  Returns 0 on success, -1 on error. */
-#define RTOS_TASK_CREATE(func, name, stack, params, prio, handle)    \
+/** @brief Stack type. */
+typedef k_thread_stack_t RTOS_TASK_STACK;
+
+/** @brief Task type. */
+typedef struct k_thread RTOS_TASK;
+
+/** @brief Statically define a task's stack. */
+#define RTOS_TASK_STACK_DEFINE(name, size)  K_THREAD_STACK_DEFINE((name), (size))
+
+/** @brief Task creation.
+    @param[in] func  Entry function
+    @param[in] name  Task name
+    @param[in] stack  Pointer to allocated stack object.
+    @param[in] prio  Task priority (lower number is higher priority)
+    @param[in] handle  Task handle (RTOS_TASK *)
+    @return Returns 0 on success, -1 on error. */
+#define RTOS_TASK_CREATE(func, name, stack, stacksize, params, prio, handle) \
 ({                                                                   \
     k_tid_t tid;                                                     \
     int ret = 0;                                                     \
@@ -40,7 +53,65 @@
     ret;                                                             \
 })
 
-/** @brief Task creation pinned to core.  Returns 0 on success, -1 on error. */
+/** @brief Dynamic Task creation.
+    @param[in] task  Task handle (RTOS_TASK *)
+    @param[in] func  Entry function
+    @param[in] name  Task name
+    @param[in] stack  Pointer to stack object to be allocated.
+    @param[in] stacksize  Size of the thread stack.
+    @param[in] prio  Task priority (lower number is higher priority)
+    @return Returns 0 on success, -1 on error. */
+static inline int RTOS_TASK_CREATE_DYNAMIC(
+    RTOS_TASK *task,
+    void (*func)(void *, void *, void *),
+    char *name,
+    RTOS_TASK_STACK *stack,
+    uint32_t stacksize,
+    void *params,
+    int prio)
+{
+    k_tid_t tid;
+    int ret;
+
+    if (!IS_ENABLED(CONFIG_DYNAMIC_THREAD_ALLOC))
+    {
+        return -9;
+    }
+    stack = k_thread_stack_alloc(stacksize, 0);
+    if (!stack)
+    {
+        return -ENOMEM;
+    }
+
+    tid = k_thread_create(
+        task,
+        stack,
+        stacksize,
+        func,
+        params,
+        NULL,
+        NULL,
+        prio,
+        0,
+        K_NO_WAIT);
+
+    ret = k_thread_name_set(tid, name);
+    if (ret != 0)
+    {
+        return ret;
+    }
+
+    return 0;
+}
+
+/** @brief Task creation pinned to core.  Returns 0 on success, -1 on error.
+    @param[in] func  Entry function
+    @param[in] name  Task name
+    @param[in] stack  Pointer to stack object to be allocated.
+    @param[in] prio  Task priority (lower number is higher priority)
+    @param[in] handle  Task handle (RTOS_TASK *)
+    @param[in] core  Core to use (0-based).
+    @return Returns 0 on success, -1 on error. */
 #define RTOS_TASK_CREATE_PINNED(func, name, stack, params, prio, handle, core)\
 ({                                                                            \
     k_tid_t tid;                                                     \
@@ -75,6 +146,7 @@
 /** @brief Macro wrapper for task sleep. */
 #define RTOS_TASK_SLEEP_ms(ms)      k_msleep((ms))
 #define RTOS_TASK_SLEEP_s(s)        k_msleep((s)*1000)
+#define RTOS_TASK_SLEEP_ticks(t)    k_sleep(K_TICKS((t)))
 
 /** @brief Event Flag Macros */
 /* Generic flag type. */
@@ -191,7 +263,7 @@ Example:
 #define RTOS_MUTEX_CREATE(pmut)             K_MUTEX_DEFINE((pmut))
 
 /** @brief Init a mutex object,
-Example: 
+Example:
     RTOS_MUTEX my_mutex;
     ...
     {
@@ -201,14 +273,14 @@ Example:
 #define RTOS_MUTEX_INIT(pmut)               k_mutex_init((pmut))
 
 /** @brief Macro to take a mutex, waiting forever. */
-#define RTOS_MUTEX_GET(m)                   k_mutex_lock((m), K_FOREVER) 
+#define RTOS_MUTEX_GET(m)                   k_mutex_lock((m), K_FOREVER)
 
 /** @brief Macro to take a mutex, waiting a timeout, in ms. Returns pdTrue if
       the mutex is successfully obtained, pdFalse on timeout.*/
-#define RTOS_MUTEX_GET_WAIT_ms(m, ms)       k_mutex_lock((m), K_MSEC((ms))) 
+#define RTOS_MUTEX_GET_WAIT_ms(m, ms)       k_mutex_lock((m), K_MSEC((ms)))
 
 /** @brief Macro to put a mutex. */
-#define RTOS_MUTEX_PUT(m)                   k_mutex_unlock((m)) 
+#define RTOS_MUTEX_PUT(m)                   k_mutex_unlock((m))
 
 /** @todo Convert QUEUE macros. */
 #if 0

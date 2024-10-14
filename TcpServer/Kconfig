@@ -1,0 +1,7 @@
+config TCPSERVER
+	bool "Enable the TcpServer lib"
+	default n
+
+module = TCPSERVER
+module-str = "TcpServer"
+source "subsys/logging/Kconfig.template.log_config"
