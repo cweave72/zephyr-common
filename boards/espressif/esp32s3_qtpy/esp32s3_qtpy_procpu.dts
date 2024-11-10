@@ -3,6 +3,7 @@
 #include "espressif/esp32s3/esp32s3.dtsi"
 #include "esp32s3_qtpy-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/led/led.h>
 
 / {
 	model = "Espressif ESP32-S3-QtPy PROCPU";
@@ -83,6 +84,7 @@
 				 LED_COLOR_ID_BLUE>;
 	};
 };
+
 &gpio0 {
 	status = "okay";
 };

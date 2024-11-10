@@ -2,6 +2,8 @@
  *  @file: NvParms.c
  *  
  *  @brief: Wrapper for getting/setting nonvolatile parameters.
+ *  Based on zephyr/subsys/settings/src/settings.shell.c
+ *    cmd_read()
 *******************************************************************************/
 #include <string.h>
 #include <stdint.h>
@@ -14,7 +16,7 @@
 LOG_MODULE_REGISTER(NvParms, CONFIG_NVPARMS_LOG_LEVEL);
 
 enum value_types {
-    VALUE_HEX,
+    VALUE_HEX = 0,
     VALUE_STRING,
 };
 
@@ -77,7 +79,7 @@ settings_read_callback(
 }
 
 /******************************************************************************
-    [docimport NvParams_load]
+    [docimport NvParms_load]
 *//**
     @brief Description.
     @param[in] name  Name of key to retrieve.
@@ -88,13 +90,16 @@ settings_read_callback(
     failure.
 ******************************************************************************/
 int
-NvParams_load(const char *name, NvParms_type type, void *dest, size_t len)
+NvParms_load(const char *name, uint8_t type, void *dest, size_t len)
 {
     int rc;
-    struct read_callback_params params;
+    enum value_types value_type = type;
 
-    params.dest = dest;
-    params.dest_max_size = len;
+    struct read_callback_params params = {
+        .dest          = dest,
+        .dest_max_size = len,
+        .value_type    = type
+    };
 
     if (type >= NVPARMS_TYPE_INVALID)
     {

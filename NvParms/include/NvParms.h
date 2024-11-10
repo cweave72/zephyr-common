@@ -6,16 +6,12 @@
 #ifndef NVPARMS_H
 #define NVPARMS_H
 
-
-typedef enum NvParms_type
-{
-    NVPARMS_TYPE_BIN = 0,
-    NVPARMS_TYPE_STRING,
-    NVPARMS_TYPE_INVALID
-} NvParms_type;
+#define NVPARMS_TYPE_HEX       0
+#define NVPARMS_TYPE_STRING    1
+#define NVPARMS_TYPE_INVALID   2
 
 /******************************************************************************
-    [docexport NvParams_load]
+    [docexport NvParms_load]
 *//**
     @brief Description.
     @param[in] name  Name of key to retrieve.
@@ -26,7 +22,7 @@ typedef enum NvParms_type
     failure.
 ******************************************************************************/
 int
-NvParams_load(const char *name, NvParms_type type, void *dest, size_t len);
+NvParms_load(const char *name, uint8_t type, void *dest, size_t len);
 
 /******************************************************************************
     [docexport NvParms_init]
