@@ -75,7 +75,7 @@ static inline int RTOS_TASK_CREATE_DYNAMIC(
 
     if (!IS_ENABLED(CONFIG_DYNAMIC_THREAD_ALLOC))
     {
-        return -9;
+        return -999;
     }
     stack = k_thread_stack_alloc(stacksize, 0);
     if (!stack)

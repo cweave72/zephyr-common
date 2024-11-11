@@ -1,0 +1,11 @@
+config WS2812LED
+	bool "Enable WS2812Led module."
+	default n
+	depends on LED_STRIP
+	help
+		A module for WS2812 led strip effects.
+
+module = WS2812LED
+module-str = "WS2812Led"
+source "subsys/logging/Kconfig.template.log_config"
+
