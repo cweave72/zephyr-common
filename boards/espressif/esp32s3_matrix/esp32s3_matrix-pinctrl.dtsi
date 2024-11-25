@@ -20,4 +20,9 @@
 		};
 	};
 
+	spim3_default: spim3_default {
+		group2 {
+			pinmux = <SPIM3_MOSI_GPIO14>;
+		};
+	};
 };

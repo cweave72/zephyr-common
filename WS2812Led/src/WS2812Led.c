@@ -1001,9 +1001,9 @@ WS2812Led_addSegment(WS2812Led_Strip *strip, WS2812Led_Segment *segment)
 
     /*  Wait here to make sure that the led strip has been initialized prior to
         adding the segment to the list. */
-    LOG_DBG("Waiting for strip to be initialized.");
+    LOG_INF("Waiting for strip to be initialized.");
     RTOS_PEND_ALL_FLAGS(&strip->eventFlagGrp, STRIP_INITIALIZED_FLAG);
-    LOG_DBG("Strip is initialized.");
+    LOG_INF("Strip is initialized.");
 
     if (CList_isEmpty(list))
     {
@@ -1090,6 +1090,7 @@ WS2812Led_init(const struct device *dev, WS2812Led_Strip *strip, uint8_t core)
     /* Must create the event group here prior to using it in the task. */
     RTOS_FLAGS_INIT(&strip->eventFlagGrp);
 
+    LOG_INF("Creating Led strip task.");
     ret = RTOS_TASK_CREATE_DYNAMIC(
         &strip->taskHandle,
         led_main,
