@@ -1,0 +1,8 @@
+config PBGENERIC
+	bool "Enable the PbGeneric lib"
+	default n
+	depends on NANOPB
+
+module = PBGENERIC
+module-str = "PbGeneric"
+source "subsys/logging/Kconfig.template.log_config"

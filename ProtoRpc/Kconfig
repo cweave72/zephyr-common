@@ -1,0 +1,8 @@
+config PROTORPC
+	bool "Enable the ProtoRpc lib"
+	default n
+	select PBGENERIC
+
+module = PROTORPC
+module-str = "ProtoRpc"
+source "subsys/logging/Kconfig.template.log_config"
