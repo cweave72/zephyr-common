@@ -3,14 +3,12 @@
  *  
  *  @brief: Implements a Protobuf-based RPC server.
 *******************************************************************************/
+#include <zephyr/logging/log.h>
 #include "PbGeneric.h"
 #include "ProtoRpc.pb.h"
 #include "ProtoRpc.h"
-#include "LogPrint.h"
-#include "LogPrint_local.h"
 
-/* Required for LOGPRINTs */
-static const char *TAG = "ProtoRpc";
+LOG_MODULE_REGISTER(ProtoRpc, CONFIG_PROTORPC_LOG_LEVEL);
 
 /******************************************************************************
     callset_lookup
@@ -71,7 +69,7 @@ ProtoRpc_server(
     ret = Pb_unpack(rcvd_buf, rcvd_buf_size, rpc->call_frame, rpc->frame_fields);
     if (!ret)
     {
-        LOGPRINT_HEXDUMP_ERROR("Pb_unpack_failed", rcvd_buf, rcvd_buf_size);
+        LOG_HEXDUMP_ERR(rcvd_buf, rcvd_buf_size, "Pb_unpack_failed");
         return;
     }
 
@@ -80,7 +78,7 @@ ProtoRpc_server(
 
     reply_header = (ProtoRpcHeader *)&rpc->reply_frame[rpc->header_offset];
 
-    LOGPRINT_DEBUG("header: seqn = %u; no_reply = %u; which_callset = %u",
+    LOG_DBG("header: seqn = %u; no_reply = %u; which_callset = %u",
         (unsigned int)header->seqn,
         (unsigned int)header->no_reply,
         (unsigned int)which_callset);
@@ -89,7 +87,7 @@ ProtoRpc_server(
     resolver = callset_lookup(which_callset, rpc->resolvers, rpc->num_resolvers);
     if (!resolver)
     {
-        LOGPRINT_ERROR("Bad resolver lookup (which_callset=%u).",
+        LOG_ERR("Bad resolver lookup (which_callset=%u).",
             (unsigned int)which_callset);
         reply_header->seqn = header->seqn;
         reply_header->status = StatusEnum_RPC_BAD_RESOLVER_LOOKUP;
@@ -103,7 +101,7 @@ ProtoRpc_server(
     handler = resolver(rpc->call_frame, rpc->callset_offset);
     if (!handler)
     {
-        LOGPRINT_ERROR("Bad handler lookup (which_callset=%u).",
+        LOG_ERR("Bad handler lookup (which_callset=%u).",
             (unsigned int)which_callset);
         reply_header->seqn = header->seqn;
         reply_header->status = StatusEnum_RPC_BAD_HANDLER_LOOKUP;
@@ -119,7 +117,7 @@ ProtoRpc_server(
     uint8_t *reply_frame = &rpc->reply_frame[rpc->callset_offset];
     handler(call_frame, reply_frame, &reply_header->status);
 
-    LOGPRINT_DEBUG("Handler provided status=0x%08x", (unsigned int)reply_header->status);
+    LOG_DBG("Handler provided status=0x%08x", (unsigned int)reply_header->status);
 
     if (header->no_reply)
     {
