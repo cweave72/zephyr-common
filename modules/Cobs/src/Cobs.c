@@ -9,7 +9,7 @@
 #include <zephyr/logging/log.h>
 
 /** @brief Initialize the logging module. */
-LOG_MODULE_REGISTER(Cobs, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(Cobs, CONFIG_COBS_LOG_LEVEL);
 
 #define ESCAPED_BYTE    0x00
 

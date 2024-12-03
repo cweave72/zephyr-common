@@ -10,7 +10,7 @@
 #include <zephyr/logging/log.h>
 
 /** @brief Initialize the logging module. */
-LOG_MODULE_REGISTER(Cobs_frame, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(Cobs_frame, CONFIG_COBS_LOG_LEVEL);
 
 #define FRAMING_BYTE        0x00
 

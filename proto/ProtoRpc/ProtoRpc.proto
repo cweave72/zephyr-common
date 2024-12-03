@@ -3,12 +3,14 @@ syntax = "proto3";
 enum StatusEnum {
     RPC_SUCCESS = 0;
     RPC_BAD_RESOLVER_LOOKUP = 1;
-    RPC_BAD_HANDLER_LOOKUP = 2;
-    RPC_HANDLER_ERROR = 3;
+    RPC_BAD_CALLSET_UNPACK = 2;
+    RPC_BAD_HANDLER_LOOKUP = 3;
+    RPC_HANDLER_ERROR = 4;
 }
 
 message ProtoRpcHeader {
     uint32 seqn = 1;
     bool no_reply = 2;
     StatusEnum status = 3;
+    uint32 which_callset = 4;
 }

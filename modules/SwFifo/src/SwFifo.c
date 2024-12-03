@@ -8,7 +8,7 @@
 #include "SwFifo.h"
 #include "CheckCond.h"
 
-LOG_MODULE_REGISTER(SwFifo, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(SwFifo, CONFIG_SWFIFO_LOG_LEVEL);
 
 /** @brief Increments the write index with circular wrap. */
 #define inc_wrIdx(pf, n)                \

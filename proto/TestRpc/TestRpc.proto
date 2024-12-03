@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+import 'nanopb.proto';
+
+package test;
+
+message Add_call {
+    int32 a = 1;
+    int32 b = 2;
+}
+
+message Add_reply {
+    int32 sum = 1;
+}
+
+message HandlerError_call {}
+message HandlerError_reply {}
+
+message SetStruct_call {
+    int32 var_int32 = 1;
+    uint32 var_uint32 = 2;
+    int64 var_int64 = 3;
+    uint64 var_uint64 = 4;
+    repeated uint32 var_uint32_array = 5 [(nanopb).max_count = 8];
+    bool var_bool = 6;
+    string var_string = 7 [(nanopb).max_size = 16];
+    bytes var_bytes = 8 [(nanopb).max_size = 16];
+}
+
+message SetStruct_reply {}
+
+message TestCallset {
+    oneof msg {
+        Add_call add_call = 1;
+        Add_reply add_reply = 2;
+        SetStruct_call setstruct_call = 3;
+        SetStruct_reply setstruct_reply = 4;
+        HandlerError_call handlererror_call = 5;
+        HandlerError_reply handlererror_reply = 6;
+    }
+}

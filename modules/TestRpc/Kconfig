@@ -1,0 +1,10 @@
+config TESTRPC
+	bool "Enable the TestRpc lib."
+	default n
+	depends on NANOPB
+	depends on PBGENERIC
+	depends on PROTORPC
+
+module = TESTRPC
+module-str = "TestRpc"
+source "subsys/logging/Kconfig.template.log_config"

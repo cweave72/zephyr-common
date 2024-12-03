@@ -3,3 +3,7 @@ config COBS
 	default n
 	help
 		Encoder and decoder for framing serial streams.
+
+module = COBS
+module-str = "Cobs"
+source "subsys/logging/Kconfig.template.log_config"

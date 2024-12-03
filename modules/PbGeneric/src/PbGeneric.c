@@ -4,8 +4,6 @@
  *  @brief: General functions for Protobuf handling.
 *******************************************************************************/
 #include <zephyr/logging/log.h>
-#include "pb_encode.h"
-#include "pb_decode.h"
 #include "PbGeneric.h"
 
 LOG_MODULE_REGISTER(PbGeneric, CONFIG_PBGENERIC_LOG_LEVEL);
@@ -54,6 +52,61 @@ Pb_unpack(uint8_t *buf, uint32_t len, void *target, const void *fields)
     if (!status)
     {
         LOG_ERR("pb_decode failure: %s", PB_GET_ERROR(&stream));
+    }
+    return status;
+}
+
+/******************************************************************************
+    [docimport Pb_pack_delimted]
+*//**
+    @brief Packs a message struct to a buffer of bytes, delimited with varints.
+    @param[in] stream  Pointer to stream context.
+    @param[in] src  Pointer to the source struct to pack.
+    @param[in] fields  Pointer to the protobuf message fields object.
+    @return Returns the number of bytes written to the stream.
+******************************************************************************/
+uint32_t
+Pb_pack_delimited(
+    pb_ostream_t *stream,
+    void *src,
+    const void *fields)
+{
+    bool status = pb_encode_ex(
+        stream,
+        (pb_msgdesc_t *)fields,
+        src,
+        PB_ENCODE_DELIMITED);
+    if (!status)
+    {
+        LOG_ERR("pb_encode_ex failure: %s", PB_GET_ERROR(stream));
+        return 0;
+    }
+    return stream->bytes_written;
+}
+
+/******************************************************************************
+    [docimport Pb_unpack_delimited]
+*//**
+    @brief Unpacks a protobuf blob delimted with varints.
+    @param[in] stream  Pointer to stream context.
+    @param[in] target  Pointer to the target struct to unpack into.
+    @param[in] fields  Pointer to the protobuf message fields object.
+    @return Returns true on success; false on failure.
+******************************************************************************/
+bool
+Pb_unpack_delimited(
+    pb_istream_t *stream,
+    void *target,
+    const void *fields)
+{
+    bool status = pb_decode_ex(
+        stream,
+        (pb_msgdesc_t *)fields,
+        target,
+        PB_DECODE_DELIMITED);
+    if (!status)
+    {
+        LOG_ERR("pb_decode failure_ex: %s", PB_GET_ERROR(stream));
     }
     return status;
 }

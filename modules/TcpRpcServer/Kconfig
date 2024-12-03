@@ -1,0 +1,9 @@
+config TCPRPCSERVER
+	bool "Enable the TcpRpcServer lib"
+	default n
+	depends on TCPSERVER
+	depends on PROTORPC
+
+module = TCPRPCSERVER
+module-str = "TcpRpcServer"
+source "subsys/logging/Kconfig.template.log_config"

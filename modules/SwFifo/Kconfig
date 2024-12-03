@@ -1,0 +1,7 @@
+config SWFIFO
+	bool "Enable the SwFifo lib"
+	default n
+
+module = SWFIFO
+module-str = "SwFifo"
+source "subsys/logging/Kconfig.template.log_config"
