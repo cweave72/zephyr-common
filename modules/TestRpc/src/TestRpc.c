@@ -7,7 +7,7 @@
 #include "TestRpc.h"
 #include "TestRpc.pb.h"
 
-LOG_MODULE_REGISTER(TestRpc, CONFIG_PROTORPC_LOG_LEVEL);
+LOG_MODULE_REGISTER(TestRpc, CONFIG_TESTRPC_LOG_LEVEL);
 
 /******************************************************************************
     add

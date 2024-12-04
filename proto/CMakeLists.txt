@@ -38,16 +38,16 @@ if (CONFIG_NANOPB)
     zephyr_nanopb_sources(${libname} ${protofiles})
 
     # Create targets for building python bindings for each .proto file.
-    foreach(s ${proto_file_stems})
+    #foreach(s ${proto_file_stems})
 
-        set(proto_target_name ${s}_proto_pybindings)
-        message(STATUS "[nanopb] Creating python target for ${s}.proto")
-        add_custom_target(
-            ${proto_target_name}
-            COMMAND make -C ${CMAKE_CURRENT_SOURCE_DIR} INC="${protoc_include_paths}" PROTO=${s} proto
-        )
-        add_dependencies(${libname} ${proto_target_name})
+    #    set(proto_target_name ${s}_proto_pybindings)
+    #    message(STATUS "[nanopb] Creating python target for ${s}.proto")
+    #    add_custom_target(
+    #        ${proto_target_name}
+    #        COMMAND make -C ${CMAKE_CURRENT_SOURCE_DIR} INC="${protoc_include_paths}" PROTO=${s} proto
+    #    )
+    #    add_dependencies(${libname} ${proto_target_name})
 
-    endforeach()
+    #endforeach()
 
 endif()

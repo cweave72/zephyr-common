@@ -43,6 +43,8 @@ HEADER_TEMPLATE = """\
     [docexport {{ proto_name }}_resolver]
 *//**
     @brief Resolver function for {{ proto_name }}.
+    @param[in] call_frame  Pointer to the unpacked call frame object.
+    @param[out] which_msg  Output which_msg was requested.
 ******************************************************************************/
 ProtoRpc_handler *
 {{ proto_name }}_resolver(void *call_frame, uint32_t offset);
@@ -55,13 +57,11 @@ SOURCE_TEMPLATE = """\
  *
  *  @brief: Handlers for {{ proto_name }}.
 *******************************************************************************/
+#include <zephyr/logging/log.h>
 #include "{{ proto_name }}.h"
-#include "LogPrint.h"
-#include "LogPrint_local.h"
-#include "ProtoRpc.pb.h"
 #include "{{ proto_name }}.pb.h"
 
-static const char *TAG = "{{ proto_name }}";
+LOG_MODULE_REGISTER({{ proto_name }}, CONFIG_{{ proto_name_caps }}_LOG_LEVEL);
 
 {% for handler in handlers -%}
 /******************************************************************************
@@ -112,14 +112,15 @@ static ProtoRpc_Handler_Entry handlers[] = {
 *//**
     @brief Resolver function for {{ proto_name }}.
     @param[in] call_frame  Pointer to the unpacked call frame object.
-    @param[in] offset  Offset of the callset member within the call_frame.
+    @param[out] which_msg  Output which_msg was requested.
 ******************************************************************************/
 ProtoRpc_handler *
-{{ proto_name }}_resolver(void *call_frame, uint32_t offset)
+{{ proto_name }}_resolver(void *call_frame, uint32_t *which_msg)
 {
-    uint8_t *frame = (uint8_t *)call_frame;
-    {{ package }}_{{ callset_type }} *this = ({{ package }}_{{ callset_type }} *)&frame[offset];
+    {{ package }}_{{ callset_type }} *this = ({{ package }}_{{ callset_type }} *)call_frame;
     unsigned int i;
+
+    *which_msg = this->which_msg;
 
     /** @brief Handler lookup */
     for (i = 0; i < NUM_HANDLERS; i++)
@@ -258,6 +259,7 @@ def process_file(file_descr: FileDescriptorProto):
         template = Environment().from_string(templ)
         if ext == '.c':
             source = template.render(proto_name=proto_name,
+                                     proto_name_caps=proto_name.upper(),
                                      package=package,
                                      callset_type=callset_type,
                                      handlers=handlers)

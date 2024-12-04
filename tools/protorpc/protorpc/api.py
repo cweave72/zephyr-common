@@ -9,8 +9,6 @@ from rich import inspect
 
 from google.protobuf.internal import encoder, decoder
 
-from proto.ProtoRpc.lib import ProtoRpcHeader
-
 logger = logging.getLogger(__name__)
 
 FrameDict = {}
@@ -138,6 +136,7 @@ class Request:
     def __init__(
         self,
         conn,
+        header_cls,
         callset_id,
         callset_name,
         callset_cls,
@@ -149,8 +148,8 @@ class Request:
         self.conn = conn
         self.callset = callset_cls()
         self.callset_id = callset_id
-        self.header = ProtoRpcHeader()
-        self.reply = Reply(callset_cls, msg_name, msg_inst)
+        self.header = header_cls()
+        self.reply = Reply(header_cls, callset_cls, msg_name, msg_inst)
         self.got_reply = False
         self.timedout = False
 
@@ -220,12 +219,12 @@ class Reply:
     """RPC reply class.
     """
 
-    def __init__(self, callset_cls, call_msg_name, call_msg_inst):
+    def __init__(self, header_cls, callset_cls, call_msg_name, call_msg_inst):
         # Save references to the call msg and instance.
         self.callset = callset_cls()
         self.call_msg = call_msg_name
         self.call_msg_inst = call_msg_inst
-        self.header = ProtoRpcHeader()
+        self.header = header_cls()
         self.result = None
         self.success = False
         self.timedout = False
@@ -312,6 +311,7 @@ class Reply:
 
 def call_factory(
     conn,
+    header_cls: t.Any,
     callset_id: int,
     callset_name: str,
     callset_cls: t.Any,
@@ -322,6 +322,7 @@ def call_factory(
         no_reply = kwargs.pop('no_reply', False)
         msg_inst = msg_cls(*args, **kwargs)
         req = Request(conn,
+                      header_cls,
                       callset_id,
                       callset_name,
                       callset_cls,
@@ -338,8 +339,9 @@ class Api:
     """RPC frame api class for a callset. Methods are callset functions.
     """
 
-    def __init__(self, callset: FrameCallset, conn) -> None:
+    def __init__(self, header_cls, callset: FrameCallset, conn) -> None:
 
+        self.header_cls = header_cls
         self.callset_name = callset.name
         self.callset_cls = callset.cls
         self.callset_id = callset.id
@@ -352,6 +354,7 @@ class Api:
                 continue
 
             func = call_factory(self.conn,
+                                self.header_cls,
                                 self.callset_id,
                                 self.callset_name,
                                 self.callset_cls,
