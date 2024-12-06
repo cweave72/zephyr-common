@@ -7,6 +7,7 @@ import logging
 from protorpc import build_api
 from protorpc.cli import setup_logging
 
+
 logger = logging.getLogger(__name__)
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -27,8 +28,13 @@ def cli_common_opts(func):
     return wrapper
 
 
-def cli_init(ctx, params):
+def cli_init(ctx, params, callsets):
     """Standard cli entry initializations.
+    callsets: List of callset classes and corresponding callset_id's for the app.
+    [(Callset0_cls, 1),
+     (Callset1_cls, 2),
+     ...
+    ]
     """
     # Create the app root logger and setup logging.
     rlogger = logging.getLogger()
@@ -39,14 +45,15 @@ def cli_init(ctx, params):
     ctx.obj['cli_params'] = params
 
     try:
-        # Import RpcFrame from rpc.lib which should be in the path of the cli
-        # app calling this function.
-        from rpc.lib import RpcFrame
+        # Import the frame header class local proto lib which should be in the
+        # path of the cli app calling this function.
+        from proto.ProtoRpc.lib import ProtoRpcHeader
 
         protocol = 'udp' if params.udp else 'tcp'
 
         # Build the RPC api and connection object.
-        api, conn = build_api(RpcFrame,
+        api, conn = build_api(ProtoRpcHeader,
+                              callsets,
                               protocol=protocol,
                               port=params.port,
                               addr=params.ip,
