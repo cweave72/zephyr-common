@@ -7,6 +7,7 @@
 #define WS2812LED_H
 
 #include <stdint.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/led_strip.h>
 #include "CList.h"
 #include "SwTimer.h"
@@ -37,7 +38,7 @@ typedef enum {
     HUE_PINK = 224
 } HSVHue;
 
-enum State {
+enum WS2812Led_State {
     SEG_OFF = 0,
     SEG_ON,
 };
@@ -52,7 +53,11 @@ typedef enum {
 #define OBJ_INIT_CODE           0x12580976
 #define IS_INITIALIZED(obj)    ((obj)->initialized == OBJ_INIT_CODE)
 
-#define WS2812LED_COLOR(hue, sat, val)   (CHSV){ (hue), (sat), (val) }
+#define WS2812LED_HSV_COLOR(hue, sat, val)       (CHSV){ (hue), (sat), (val) }
+#define WS2812LED_HSV_COLOR_OFF                  (CHSV){ 0, 0, 0 }
+
+#define WS2812LED_RGB_COLOR(r, g, b)             (CRGB){ (r), (g), (b) }
+#define WS2812LED_RGB_COLOR_OFF                  (CRGB){ 0, 0, 0 }
 
 /** @brief State object for iterating from one color to another is a gradient
       manner.
@@ -116,7 +121,7 @@ typedef struct WS2812Led_Segment
     /** @brief Timer period, ms. */
     uint32_t timer_period_ms;
     /** @brief State */
-    enum State state;
+    enum WS2812Led_State state;
     /** @brief Segment effect mode. */
     enum Mode mode;
     /** @brief task loop delay (ms) */
@@ -127,7 +132,7 @@ typedef struct WS2812Led_Segment
     /** @brief Task stack size. */
     uint16_t taskStackSize;
     /** @brief Task name. */
-    char taskName[16];
+    char taskName[CONFIG_THREAD_MAX_NAME_LEN];
     /** @brief Task prio. */
     uint8_t taskPrio;
     /** @brief Loop task handle. */
@@ -139,7 +144,11 @@ typedef struct WS2812Led_Segment
     WS2812Led_GradientIter gradIter;
 
     /** @brief Methods */
+    void (*single)(void *self, const CHSV *color, uint16_t idx);
+    void (*single_rgb)(void *self, const CRGB *color, uint16_t idx);
+    void (*single_random)(void *self, uint8_t sat, uint8_t val, uint16_t idx);
     void (*fill_solid)(void *self, const CHSV *color);
+    void (*fill_solid_rgb)(void *self, const CRGB *color);
     void (*fill_random)(void *self, uint8_t sat, uint8_t val);
     void (*fill_rainbow)(void *self, uint8_t initialHue, uint8_t sat, uint8_t val);
     void (*fill_gradient)(void *self, CHSV *startColor, CHSV *endColor, GradientDir dir);
@@ -153,6 +162,7 @@ typedef struct WS2812Led_Segment
     void (*blend)(void *self, bool init, CHSV *startColor, CHSV *endColor, GradientDir dir, uint16_t numSteps, uint16_t ms);
     void (*blink)(void *self, uint32_t period_ms);
     void (*show)(void *self);
+    void (*hide)(void *self);
     void (*off)(void *self);
     
 } WS2812Led_Segment;
@@ -176,12 +186,12 @@ typedef struct WS2812Led_Strip
     /** @brief Task stack size. */
     uint16_t taskStackSize;
     /** @brief Task name. */
-    char taskName[16];
+    char taskName[CONFIG_THREAD_MAX_NAME_LEN];
     /** @brief Task prio. */
     uint8_t taskPrio;
 
-    /** @brief Flag group */
-    RTOS_FLAGS eventFlagGrp;
+    /** @brief Semaphore signaling init complete. */
+    RTOS_SEM initialized;
 
     /* Internal Members. */
     /** @brief Loop task handle. */
@@ -195,6 +205,63 @@ typedef struct WS2812Led_Strip
 
 } WS2812Led_Strip;
 
+/** @brief Object for a single LED strip containing one segment. */
+typedef struct WS2812Led
+{
+    /** @brief Strip object. */
+    WS2812Led_Strip strip;
+    /** @brief Single segment object. */
+    WS2812Led_Segment seg;
+} WS2812Led;
+
+/** @brief Helper macro for initializing a led strip with reasonable defaults.
+*/
+#define WS2812LED_INIT_SIMPLE(dev, led, name, num) \
+    WS2812Led_init(                                \
+        (dev),                                     \
+        (led),                                     \
+        (name),                                    \
+        (num),                                     \
+        1024,  /* taskStackSize */                 \
+        20,    /* taskLoop_ms */                   \
+        15,    /* taskPrio */                      \
+        512,   /* segStackSize */                  \
+        20,    /* segLoop_ms */                    \
+        15)    /* segPrio */
+
+#define WS2812Led_show(pled)\
+    (pled)->seg.show(&(pled)->seg) 
+
+#define WS2812Led_hide(pled)\
+    (pled)->seg.hide(&(pled)->seg) 
+
+#define WS2812Led_off(pled)\
+    (pled)->seg.off(&(pled)->seg) 
+
+#define WS2812Led_single(pled, color, idx)\
+    (pled)->seg.single(&(pled)->seg, (color), (idx)) 
+
+#define WS2812Led_single_random(pled, sat, val, idx)\
+    (pled)->seg.single_random(&(pled)->seg, (sat), (val), (idx)) 
+
+/******************************************************************************
+    [docexport WS2812Led_single_update]
+*//**
+    @brief Update a single LED with a HSV value.
+    @param[in] dev  Pointer to device instance.
+******************************************************************************/
+int
+WS2812Led_single_update(const struct device *dev, const CHSV *hsv);
+
+/******************************************************************************
+    [docexport WS2812Led_single_off]
+*//**
+    @brief Turn single LED off.
+    @param[in] dev  Pointer to device instance.
+******************************************************************************/
+void
+WS2812Led_single_off(const struct device *dev);
+
 /******************************************************************************
     [docexport WS2812Led_addSegment]
 *//**
@@ -204,27 +271,53 @@ int
 WS2812Led_addSegment(WS2812Led_Strip *strip, WS2812Led_Segment *segment);
 
 /******************************************************************************
-    [docexport WS2812_show]
+    [docexport WS2812_show_all]
 *//**
-    @brief Shows all segments.
+    @brief Shows all segments added to strip.
 ******************************************************************************/
 void
-WS2812Led_show(WS2812Led_Strip *strip);
+WS2812Led_show_all(WS2812Led_Strip *strip);
+
+/******************************************************************************
+    [docexport WS2812Led_init_strip]
+*//**
+    @brief Initializes an LED strip which will have multiple segments.
+    Add additional segments with WS2812Led_addSegment.
+
+    @param[in] dev  Pointer to device instance.
+    @param[in] strip  Pointer to the LED strip object to initialize.
+******************************************************************************/
+int
+WS2812Led_init_strip( const struct device *dev, WS2812Led_Strip *strip);
 
 /******************************************************************************
     [docexport WS2812Led_init]
 *//**
-    @brief Initializes an LED strip.
+    @brief Initializes an LED strip used as a single segment.
+    This is the most typical use-case.
 
     @param[in] dev  Pointer to device instance.
-    @param[in] strip  Pointer to the LED strip object to initialize.
-    @param[in] core  Which core to pin the led task to. This is critical if the
-    system is also using WiFi which is known to cause random flicker in LEDs due
-    to the wifi interrupt handler interrupting the RMT peripheral transmit.
-    This can be mitigated by pinning the created led task associated with this
-    strip on the other core. Usually wifi uses core 0, so set this to 1 to cause
-    the task (and all underlying RMT functionality) to use the other core.
+    @param[in] led  Pointer to a WS2812Led object.
+    @param[in] name  Name for the strip.
+    @param[in] numPixels  Number of pixels in the led strip.
+    @param[in] taskStackSize  Stack size for the main strip loop (try 1024).
+    @param[in] taskLoop_ms  Task loop delay, ms (try 50).
+    @param[in] taskPrio  Main task priority (try 15).
+    @param[in] segStackSize  Stack size for the segment effects loop (try 512).
+    @param[in] segLoop_ms  Loop delay, ms for the segment effects loop (try 50).
+    @param[in] segPrio  Segment task priority (try 15).
+    @return 0 on success, negative error code on failure.
 ******************************************************************************/
 int
-WS2812Led_init(const struct device *dev, WS2812Led_Strip *strip, uint8_t core);
+WS2812Led_init(
+    const struct device *dev,
+    WS2812Led *led,
+    const char *name,
+    uint16_t numPixels,
+    uint32_t taskStackSize,
+    uint32_t taskLoop_ms,
+    uint32_t taskPrio,
+    uint32_t segStackSize,
+    uint32_t segLoop_ms,
+    uint32_t segPrio);
 #endif

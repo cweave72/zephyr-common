@@ -282,6 +282,19 @@ Example:
 /** @brief Macro to put a mutex. */
 #define RTOS_MUTEX_PUT(m)                   k_mutex_unlock((m))
 
+/** @brief Semaphore type */
+#define RTOS_SEM                            struct k_sem
+/** @brief Semaphore run-time init (count limit 1) */
+#define RTOS_SEM_INIT(psem)                 k_sem_init((psem), 0, 1)
+/** @brief Semaphore compile-time init (count limit 1) */
+#define RTOS_SEM_DEFINE(sem)                K_SEM_DEFINE(sem, 0, 1)
+/** @brief Give semaphore */
+#define RTOS_SEM_GIVE(psem)                 k_sem_give((psem))
+/** @brief Take semaphore, wait forever */
+#define RTOS_SEM_TAKE(psem)                 k_sem_take((psem), K_FOREVER)
+/** @brief Take semaphore, wait timeout, ms */
+#define RTOS_SEM_TAKE_MS(psem, ms)          k_sem_take((psem), K_MSEC((ms)))
+
 /** @todo Convert QUEUE macros. */
 #if 0
 /** @brief Queues. */

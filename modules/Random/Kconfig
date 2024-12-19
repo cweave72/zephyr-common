@@ -1,0 +1,5 @@
+config RANDOM
+	bool "Enable the RANDOM lib"
+	default n
+	depends on ENTROPY_GENERATOR
+

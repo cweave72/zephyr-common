@@ -19,8 +19,6 @@
 /** @brief Initialize the logging module. */
 LOG_MODULE_REGISTER(WS2812Led, CONFIG_WS2812LED_LOG_LEVEL);
 
-#define STRIP_INITIALIZED_FLAG     (uint32_t)(0x1 << 0)
-
 #define GET_RANDOM_HSV()        (CHSV){ RANDOM8(), RANDOM8(), RANDOM8() }
 #define GET_RANDOM_HUE(s, v)    (CHSV){ RANDOM8(), (s), (v) }
 #define GET_RANDOM_VAL(h, s)    (CHSV){ (h), (s), RANDOM8() }
@@ -90,6 +88,7 @@ scale8_rgb(CRGB *rgb, uint8_t scale)
     rgb->b = SCALE8(rgb->b, scale);
 }
 
+#if 0
 static uint16_t
 random_walk(uint16_t pos, uint16_t limit)
 {
@@ -102,8 +101,15 @@ random_walk(uint16_t pos, uint16_t limit)
         return (pos == 0) ? limit-1 : pos - 1;
     }
 }
+#endif
 
-/** @brief Test that a segment is blank (using rgb_pixels). */
+/******************************************************************************
+    is_seg_blank_rgb
+*//**
+    @brief Test that a segment is blank (using rgb_pixels).
+    @param[in] seg  Pointer to active segment.
+    @return Returns true if the segment is blank, false otherwise.
+******************************************************************************/
 static bool
 is_seg_blank_rgb(WS2812Led_Segment *seg)
 {
@@ -119,9 +125,12 @@ is_seg_blank_rgb(WS2812Led_Segment *seg)
     return true;
 }
 
-/** @brief Approximates a black body radiadion spectrum for a given temperature
+/******************************************************************************
+    get_heatcolor
+*//**
+    @brief Approximates a black body radiadion spectrum for a given temperature
   level. Used for fire animations. Ported from FastLED's HeatColor function.
-*/
+******************************************************************************/
 static void
 get_heatcolor(uint8_t temperature, CRGB *heatcolor)
 {
@@ -165,7 +174,11 @@ get_heatcolor(uint8_t temperature, CRGB *heatcolor)
     }
 }
 
-/** @brief Convert HSV color to RGB. */
+/******************************************************************************
+    hsv2rgb
+*//**
+    @brief Convert an HSV color to RGB.
+******************************************************************************/
 static void
 hsv2rgb(const CHSV *hsv, CRGB *rgb)
 {
@@ -225,68 +238,49 @@ hsv2rgb(const CHSV *hsv, CRGB *rgb)
     rgb->b = gamma8(rgb->b);
 }
 
-/** @brief Fades CRGB by factor 0-255 (0=no fade, 255=max fade)
+/******************************************************************************
+    fadeColor
+*//**
+    @brief Fades CRGB by factor 0-255 (0=no fade, 255=max fade).
     Modifies RGB object in place.
-*/
+
+    @param[in] rgb  CRGB color to affect.
+    @param[in] factor  Factor controlling amount to fade by.
+******************************************************************************/
 static void
 fadeColor(CRGB *rgb, uint8_t factor)
 {
     scale8_rgb(rgb, 255-factor);
 }
 
-/** @brief Fades pixel in rgb_pixels array at pixelIdx by factor.
-*/
+/******************************************************************************
+    fadePixel
+*//**
+    @brief Fades a pixel by a factor (internal use only).
+
+    @param[in] seg  Pointer to the active segment.
+    @param[in] idx  The segment pixel index to fade.
+    @param[in] factor  Factor controlling amount to fade by.
+******************************************************************************/
 static void
-fadePixel(WS2812Led_Segment *seg, uint16_t pixelIdx, uint8_t fadeFactor)
+fadePixel(WS2812Led_Segment *seg, uint16_t idx, uint8_t factor)
 {
-    CRGB *pixel_rgb = &seg->rgb_pixels[pixelIdx];
+    CRGB *pixel_rgb = &seg->rgb_pixels[idx];
     /* Fade the RGB value by the provided factor. */
-    fadeColor(pixel_rgb, fadeFactor);
+    fadeColor(pixel_rgb, factor);
 }
 
-static void
-fill_solid(void *self, const CHSV *color)
-{
-    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
-    uint16_t i;
+/******************************************************************************
+    get_gradient_iter
+*//**
+    @brief Gets a gradient iterator.
 
-    for (i = 0; i < seg->numPixels; i++)
-    {
-        seg->pixels[i].h = color->h;
-        seg->pixels[i].s = color->s;
-        seg->pixels[i].v = color->v;
-    }
-    seg->mode = MODE_STATIC;
-}
-
-static void
-fill_solid_rgb(void *self, const CRGB *color)
-{
-    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
-    uint16_t i;
-
-    for (i = 0; i < seg->numPixels; i++)
-    {
-        seg->rgb_pixels[i].r = color->r;
-        seg->rgb_pixels[i].g = color->g;
-        seg->rgb_pixels[i].b = color->b;
-    }
-    seg->mode = MODE_STATIC;
-}
-
-static void
-fill_random(void *self, uint8_t sat, uint8_t val)
-{
-    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
-    uint16_t i;
-
-    for (i = 0; i < seg->numPixels; i++)
-    {
-        seg->pixels[i] = GET_RANDOM_HUE(sat, val);
-    }
-    seg->mode = MODE_STATIC;
-}
-
+    @param[in] startColor  The gradient start color.
+    @param[in] endColor  The gradient end color.
+    @param[in] dir  Gradient direction (usually GRAD_LONGEST).
+    @param[in] numSteps  Number of steps to use
+    @param[out] gradIter  Returned initialized iterator.
+******************************************************************************/
 static void
 get_gradient_iter(
     CHSV *startColor,
@@ -358,7 +352,179 @@ get_gradient_iter(
     gradIter->valStart_8 = gradIter->valAccum_8;
 }
 
-/** @brief Gradiant fill ported from FastLED's fill_gradiant() function. */
+/****************** METHODS ***************************************************/
+
+/******************************************************************************
+    fill_solid_rgb
+*//**
+    @brief Method which fills all pixels with an HSV color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] color  CHSV pointer to color to use.
+******************************************************************************/
+static void
+fill_solid(void *self, const CHSV *color)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+    uint16_t i;
+
+    for (i = 0; i < seg->numPixels; i++)
+    {
+        seg->pixels[i].h = color->h;
+        seg->pixels[i].s = color->s;
+        seg->pixels[i].v = color->v;
+    }
+    seg->mode = MODE_STATIC;
+}
+
+/******************************************************************************
+    fill_solid_rgb
+*//**
+    @brief Method which fills all pixels with an RBG color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] color  CRGB pointer to color to use.
+******************************************************************************/
+static void
+fill_solid_rgb(void *self, const CRGB *color)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+    uint16_t i;
+
+    for (i = 0; i < seg->numPixels; i++)
+    {
+        seg->rgb_pixels[i].r = color->r;
+        seg->rgb_pixels[i].g = color->g;
+        seg->rgb_pixels[i].b = color->b;
+    }
+    seg->mode = MODE_STATIC;
+}
+
+/******************************************************************************
+    single_random
+*//**
+    @brief Method which populates a single pixel with an HSV color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] color  CHSB pointer to color to use..
+    @param[in] idx  Index of pixel.
+******************************************************************************/
+static void
+single(
+    void *self,
+    const CHSV *color,
+    uint16_t idx)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+
+    if (!(idx >= seg->startIdx && idx <= seg->endIdx))
+    {
+        LOG_ERR("single: idx out of range. (%u not in %u to %u)",
+            idx, seg->startIdx, seg->endIdx);
+        return;
+    }
+
+    seg->pixels[idx].h = color->h;
+    seg->pixels[idx].s = color->s;
+    seg->pixels[idx].v = color->v;
+    seg->mode = MODE_STATIC;
+}
+
+/******************************************************************************
+    single_random
+*//**
+    @brief Method which populates a single pixel with an RGB color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] color  CRBG pointer to color to use..
+    @param[in] idx  Index of pixel.
+******************************************************************************/
+static void
+single_rgb(
+    void *self,
+    const CRGB *color,
+    uint16_t idx)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+
+    if (!(idx >= seg->startIdx && idx <= seg->endIdx))
+    {
+        LOG_ERR("single_rgb: idx out of range. (%u not in %u to %u)",
+            idx, seg->startIdx, seg->endIdx);
+        return;
+    }
+
+    seg->rgb_pixels[idx].r = color->r;
+    seg->rgb_pixels[idx].g = color->g;
+    seg->rgb_pixels[idx].b = color->b;
+    seg->mode = MODE_STATIC;
+}
+
+/******************************************************************************
+    single_random
+*//**
+    @brief Method which populates a single pixel with a random color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] sat  HSV saturation.
+    @param[in] val  HSV value.
+    @param[in] idx  Index of pixel.
+******************************************************************************/
+static void
+single_random(
+    void *self,
+    uint8_t sat,
+    uint8_t val,
+    uint16_t idx)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+
+    if (!(idx >= seg->startIdx && idx <= seg->endIdx))
+    {
+        LOG_ERR("single_random: idx out of range. (%u not in %u to %u)",
+            idx, seg->startIdx, seg->endIdx);
+        return;
+    }
+
+    seg->pixels[idx] = GET_RANDOM_HUE(sat, val);
+    seg->mode = MODE_STATIC;
+}
+
+
+/******************************************************************************
+    fill_random
+*//**
+    @brief Method which fills all pixels with random colors.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] sat  HSV saturation.
+    @param[in] val  HSV value.
+******************************************************************************/
+static void
+fill_random(void *self, uint8_t sat, uint8_t val)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+    uint16_t i;
+
+    for (i = 0; i < seg->numPixels; i++)
+    {
+        seg->pixels[i] = GET_RANDOM_HUE(sat, val);
+    }
+    seg->mode = MODE_STATIC;
+}
+
+
+/******************************************************************************
+    fill_gradient
+*//**
+    @brief Method which fills all pixels from a gradient.
+    (ported from FastLED's fill_gradiant() function.)
+
+    @param[in] self  Pointer to self segment.
+    @param[in] startColor  The gradient start color.
+    @param[in] endColor  The gradient end color.
+    @param[in] dir  Gradient direction (usually GRAD_LONGEST).
+******************************************************************************/
 static void
 fill_gradient(
     void *self,
@@ -397,6 +563,18 @@ fill_gradient(
     seg->mode = MODE_STATIC;
 }
 
+/******************************************************************************
+    twinkle
+*//**
+    @brief Method which provides a twinkling effect. Each pixel is given a
+    random color.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first call.
+    @param[in] numToLight  Count of number of pixels to light (random
+    locations across the segment) until the process is restarted..
+    @param[in] delay_ms  Loop delay, ms.
+******************************************************************************/
 static void
 twinkle(
     void *self,
@@ -435,6 +613,24 @@ twinkle(
     seg->mode = MODE_TWINKLE;
 }
 
+/******************************************************************************
+    twinkle
+*//**
+    @brief Method which provides a sparkle effect. Each pixel is given the
+    color provided at init.
+
+    Example:
+        CHSV color = WS2812LED_HSV_COLOR(HUE_AQUA, 255, 240);
+        segment0.sparkle(&segment0, true, &color, 1, 10);
+        RTOS_TASK_SLEEP_s(10);
+
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first call.
+    @param[in] color  HSV color to use.
+    @param[in] numToLight  Count of number of pixels to light (random
+    locations across the segment) until the process is restarted..
+    @param[in] delay_ms  Loop delay, ms.
+******************************************************************************/
 static void
 sparkle(
     void *self,
@@ -480,6 +676,22 @@ sparkle(
 }
 
 
+/******************************************************************************
+    fire
+*//**
+    @brief Method which provides a fire effect. 
+
+    Example:
+        segment0.fire(&segment0, true, 120, 100, 10);
+        RTOS_TASK_SLEEP_s(20);
+
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first call.
+    @param[in] cooling  Cooling factor (play around with it).
+    @param[in] sparking  Sparking factor
+    locations across the segment) until the process is restarted..
+    @param[in] delay_ms  Loop delay, ms.
+******************************************************************************/
 static void
 fire(
     void *self,
@@ -557,6 +769,23 @@ fire(
     seg->mode = MODE_FIRE;
 }
 
+/******************************************************************************
+    dissolve
+*//**
+    @brief Method which provides a pixel dissolving effect. 
+
+    Example:
+        color = WS2812LED_HSV_COLOR(HUE_AQUA, 255, 240);
+        segment0.dissolve(&segment0, true, &color, 80, 20, 50);
+        RTOS_TASK_SLEEP_s(20);
+
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first call.
+    @param[in] color  HSV color to use.
+    @param[in] decayFactor  Decaying factor (experiment with this).
+    @param[in] decayProb  Probability a pixel will be chosen for decay.
+    @param[in] delay_ms  Loop delay, ms.
+******************************************************************************/
 static void
 dissolve(
     void *self,
@@ -613,6 +842,24 @@ dissolve(
     seg->mode = MODE_DISSOLVE;
 }
 
+/******************************************************************************
+    meteor
+*//**
+    @brief Method which provides a shooting start effect. 
+
+    Example:
+        color = WS2812LED_HSV_COLOR(HUE_BLUE, 255, 240);
+        segment0.meteor(&segment0, true, &color, 1, 80, true, 20);
+        RTOS_TASK_SLEEP_s(20);
+
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first call.
+    @param[in] color  HSV color to use.
+    @param[in] meteorSize  Relative size of the meteor pixel group.
+    @param[in] meteorDecay  Decay factor.
+    @param[in] decayRandom  Randomize decay factors.
+    @param[in] delay_ms  Loop delay, ms.
+******************************************************************************/
 static void
 meteor(
     void *self,
@@ -681,6 +928,19 @@ meteor(
     seg->mode = MODE_METEOR;
 }
 
+/******************************************************************************
+    blend
+*//**
+    @brief Segment method to blend from start color to end color over a set
+    number of steps.
+    @param[in] self  Pointer to self segment.
+    @param[in] init  Flag indicating the first initializing call.
+    @param[in] startColor  Starting color (hsv)
+    @param[in] endColor  Ending color (hsv)
+    @param[in] dir  Gradient direction (GRAD_LONGEST is typical)
+    @param[in] numSteps  Number of steps from start to end color.
+    @param[in] stepInc_ms  Step period, ms.
+******************************************************************************/
 static void
 blend(
     void *self,
@@ -738,6 +998,16 @@ blend(
     }
 }
 
+/******************************************************************************
+    fill_rainbow
+*//**
+    @brief Segment method to fill across all pixels from all colors.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] initialHue  Starting color for pixel 0.
+    @param[in] sat  HSV saturation
+    @param[in] val  HSV value
+******************************************************************************/
 static void
 fill_rainbow(
     void *self,
@@ -750,6 +1020,14 @@ fill_rainbow(
     fill_gradient(self, &start, &end, GRAD_LONGEST);
 }
 
+/******************************************************************************
+    fill_rainbow
+*//**
+    @brief Segment method to blink all pixels at a certain period.
+
+    @param[in] self  Pointer to self segment.
+    @param[in] period_ms  Blink period (on time will be period/2).
+******************************************************************************/
 static void
 blink(
     void *self,
@@ -774,6 +1052,13 @@ blink(
     seg->mode = MODE_BLINK;
 }
 
+/******************************************************************************
+    show
+*//**
+    @brief Segment method to show all pixels.
+
+    @param[in] self  Pointer to self segment.
+******************************************************************************/
 static void
 show(void *self)
 {
@@ -781,6 +1066,27 @@ show(void *self)
     seg->state = SEG_ON;
 }
 
+/******************************************************************************
+    hide
+*//**
+    @brief Segment method to hide all pixels (retaining information).
+
+    @param[in] self  Pointer to self segment.
+******************************************************************************/
+static void
+hide(void *self)
+{
+    WS2812Led_Segment *seg = (WS2812Led_Segment *)self;
+    seg->state = SEG_OFF;
+}
+
+/******************************************************************************
+    off
+*//**
+    @brief Segment method to blank all pixels.
+
+    @param[in] self  Pointer to self segment.
+******************************************************************************/
 static void
 off(void *self)
 {
@@ -864,8 +1170,8 @@ led_main(void *p0, void *p1, void *p2)
     /* Initialize the segment list. */
     CList_init(&strip->segments);
 
-    RTOS_FLAGS_SET(&strip->eventFlagGrp, STRIP_INITIALIZED_FLAG);
-    LOG_INF("Led strip initialized.");
+    /* Give semaphore indicating that the segment list has been initialized. */
+    RTOS_SEM_GIVE(&strip->initialized);
 
     leds = (CRGB *)malloc(led_array_size);
     if (!leds)
@@ -938,6 +1244,45 @@ led_main(void *p0, void *p1, void *p2)
 }
 
 /******************************************************************************
+    [docimport WS2812Led_single_update]
+*//**
+    @brief Update a single LED with a HSV value.
+    @param[in] dev  Pointer to device instance.
+******************************************************************************/
+int
+WS2812Led_single_update(const struct device *dev, const CHSV *hsv)
+{
+    CRGB rgbColor;
+    int ret;
+
+    /* Convert pixel HSV to RGB. */
+    hsv2rgb(hsv, &rgbColor);
+
+    /* Write updated led. */
+    ret = led_strip_update_rgb(dev, &rgbColor, 1);
+    if (ret != 0)
+    {
+        LOG_ERR("Error in led_strip_update_rgb: %d", ret);
+        return ret;
+    }
+    
+    return 0;
+}
+
+/******************************************************************************
+    [docimport WS2812Led_single_off]
+*//**
+    @brief Turn single LED off.
+    @param[in] dev  Pointer to device instance.
+******************************************************************************/
+void
+WS2812Led_single_off(const struct device *dev)
+{
+    CHSV color = WS2812LED_HSV_COLOR_OFF;
+    WS2812Led_single_update(dev, &color);
+}
+
+/******************************************************************************
     [docimport WS2812Led_addSegment]
 *//**
     @brief Adds a segment to a WS2812Led_Strip object.
@@ -985,24 +1330,29 @@ WS2812Led_addSegment(WS2812Led_Strip *strip, WS2812Led_Segment *segment)
     /* Indicate the object is not initialized. */
     segment->gradIter.initialized = 0;
 
-    segment->off           = off;
-    segment->show          = show;
-    segment->fill_solid    = fill_solid;
-    segment->fill_random   = fill_random;
-    segment->fill_rainbow  = fill_rainbow;
-    segment->fill_gradient = fill_gradient;
-    segment->blink         = blink;
-    segment->blend         = blend;
-    segment->twinkle       = twinkle;
-    segment->sparkle       = sparkle;
-    segment->meteor        = meteor;
-    segment->dissolve      = dissolve;
-    segment->fire          = fire;
+    segment->off            = off;
+    segment->show           = show;
+    segment->hide           = hide;
+    segment->single         = single;
+    segment->single_rgb     = single_rgb;
+    segment->single_random  = single_random;
+    segment->fill_solid     = fill_solid;
+    segment->fill_solid_rgb = fill_solid_rgb;
+    segment->fill_random    = fill_random;
+    segment->fill_rainbow   = fill_rainbow;
+    segment->fill_gradient  = fill_gradient;
+    segment->blink          = blink;
+    segment->blend          = blend;
+    segment->twinkle        = twinkle;
+    segment->sparkle        = sparkle;
+    segment->meteor         = meteor;
+    segment->dissolve       = dissolve;
+    segment->fire           = fire;
 
     /*  Wait here to make sure that the led strip has been initialized prior to
         adding the segment to the list. */
     LOG_INF("Waiting for strip to be initialized.");
-    RTOS_PEND_ALL_FLAGS(&strip->eventFlagGrp, STRIP_INITIALIZED_FLAG);
+    RTOS_SEM_TAKE(&strip->initialized);
     LOG_INF("Strip is initialized.");
 
     if (CList_isEmpty(list))
@@ -1042,12 +1392,12 @@ WS2812Led_addSegment(WS2812Led_Strip *strip, WS2812Led_Segment *segment)
 }
 
 /******************************************************************************
-    [docimport WS2812_show]
+    [docimport WS2812_show_all]
 *//**
-    @brief Shows all segments.
+    @brief Shows all segments added to strip.
 ******************************************************************************/
 void
-WS2812Led_show(WS2812Led_Strip *strip)
+WS2812Led_show_all(WS2812Led_Strip *strip)
 {
     CList *iter;
     WS2812Led_Segment *segment;
@@ -1061,21 +1411,16 @@ WS2812Led_show(WS2812Led_Strip *strip)
 }
 
 /******************************************************************************
-    [docimport WS2812Led_init]
+    [docimport WS2812Led_init_strip]
 *//**
-    @brief Initializes an LED strip.
+    @brief Initializes an LED strip which will have multiple segments.
+    Add additional segments with WS2812Led_addSegment.
 
     @param[in] dev  Pointer to device instance.
     @param[in] strip  Pointer to the LED strip object to initialize.
-    @param[in] core  Which core to pin the led task to. This is critical if the
-    system is also using WiFi which is known to cause random flicker in LEDs due
-    to the wifi interrupt handler interrupting the RMT peripheral transmit.
-    This can be mitigated by pinning the created led task associated with this
-    strip on the other core. Usually wifi uses core 0, so set this to 1 to cause
-    the task (and all underlying RMT functionality) to use the other core.
 ******************************************************************************/
 int
-WS2812Led_init(const struct device *dev, WS2812Led_Strip *strip, uint8_t core)
+WS2812Led_init_strip( const struct device *dev, WS2812Led_Strip *strip)
 {
     int ret;
 
@@ -1087,8 +1432,7 @@ WS2812Led_init(const struct device *dev, WS2812Led_Strip *strip, uint8_t core)
         return -ENODEV;
     }
 
-    /* Must create the event group here prior to using it in the task. */
-    RTOS_FLAGS_INIT(&strip->eventFlagGrp);
+    RTOS_SEM_INIT(&strip->initialized);
 
     LOG_INF("Creating Led strip task.");
     ret = RTOS_TASK_CREATE_DYNAMIC(
@@ -1102,6 +1446,91 @@ WS2812Led_init(const struct device *dev, WS2812Led_Strip *strip, uint8_t core)
     if (ret != 0)
     {
         LOG_ERR("Failed creating LED strip task (%d)", ret);
+        return ret;
+    }
+
+    return 0;
+}
+
+/******************************************************************************
+    [docimport WS2812Led_init]
+*//**
+    @brief Initializes an LED strip used as a single segment.
+    This is the most typical use-case.
+
+    @param[in] dev  Pointer to device instance.
+    @param[in] led  Pointer to a WS2812Led object.
+    @param[in] name  Name for the strip.
+    @param[in] numPixels  Number of pixels in the led strip.
+    @param[in] taskStackSize  Stack size for the main strip loop (try 1024).
+    @param[in] taskLoop_ms  Task loop delay, ms (try 50).
+    @param[in] taskPrio  Main task priority (try 15).
+    @param[in] segStackSize  Stack size for the segment effects loop (try 512).
+    @param[in] segLoop_ms  Loop delay, ms for the segment effects loop (try 50).
+    @param[in] segPrio  Segment task priority (try 15).
+    @return 0 on success, negative error code on failure.
+******************************************************************************/
+int
+WS2812Led_init(
+    const struct device *dev,
+    WS2812Led *led,
+    const char *name,
+    uint16_t numPixels,
+    uint32_t taskStackSize,
+    uint32_t taskLoop_ms,
+    uint32_t taskPrio,
+    uint32_t segStackSize,
+    uint32_t segLoop_ms,
+    uint32_t segPrio)
+{
+    WS2812Led_Strip *strip = &led->strip;
+    WS2812Led_Segment *seg = &led->seg;
+    int ret;
+
+    strip->dev = dev;
+    strip->numPixels = numPixels;
+    strip->loopDelay_ms = taskLoop_ms;
+    strip->taskStackSize = taskStackSize;
+    strip->taskPrio = taskPrio;
+    strncpy(strip->taskName, name, sizeof(strip->taskName));
+    strncat(strip->taskName, "_strip", sizeof(strip->taskName));
+
+    seg->startIdx = 0;
+    seg->endIdx = numPixels - 1;
+    seg->taskStackSize = segStackSize;
+    seg->taskPrio = segPrio;
+    strncpy(seg->taskName, name, sizeof(seg->taskName));
+    strncat(seg->taskName, "_seg", sizeof(seg->taskName));
+
+    LOG_INF("seg->startIdx = %u", seg->startIdx);
+
+    if (!device_is_ready(dev))
+    {
+        LOG_ERR("LED strip device is not ready");
+        return -ENODEV;
+    }
+
+    RTOS_SEM_INIT(&strip->initialized);
+
+    LOG_INF("Creating Led task.");
+    ret = RTOS_TASK_CREATE_DYNAMIC(
+        &strip->taskHandle,
+        led_main,
+        strip->taskName,
+        strip->taskStack,
+        strip->taskStackSize,
+        (void *)strip,
+        strip->taskPrio);
+    if (ret != 0)
+    {
+        LOG_ERR("Failed creating LED strip task (%d)", ret);
+        return ret;
+    }
+
+    /* Add the built-in segment. */
+    if ((ret = WS2812Led_addSegment(strip, &led->seg)) < 0)
+    {
+        LOG_ERR("Error adding led segment: %d", ret);
         return ret;
     }
 
