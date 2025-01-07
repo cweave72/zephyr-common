@@ -58,7 +58,7 @@ Cobs_framer(
     [docimport Cobs_deframer]
 *//**
     @brief Performs COBS deframing on the incoming bytestream.
-    @param[in] deframer  Pointer to Cobs_Deframer object.
+    @param[in] self  Pointer to Cobs_Deframer object.
     @param[in] buf_in  Pointer to input data buffer (new data).
     @param[in] buf_in_len  Length of new bytes in buf_in.
     @param[in] buf_out  Pointer to output buffer where deframed data will be
@@ -68,12 +68,13 @@ Cobs_framer(
 ******************************************************************************/
 int
 Cobs_deframer(
-    Cobs_Deframer *deframer,
+    void *self,
     uint8_t *buf_in,
     uint32_t buf_in_len,
     uint8_t *buf_out,
     uint32_t max_buf_out)
 {
+    Cobs_Deframer *deframer = (Cobs_Deframer *)self;
     SwFifo *fifo = &deframer->fifo;
     uint8_t *work = deframer->work;
     uint32_t work_size = deframer->work_size;
@@ -219,16 +220,17 @@ Cobs_deframer(
     [docimport Cobs_frame_init]
 *//**
     @brief Initializes a COBS framer/deframer.
-    @param[in] deframer  Pointer to uninitialized Cobs_Deframer object.
+    @param[in] self  Pointer to uninitialized Cobs_Deframer object.
     @param[in] buf_depth  Buffer depth for the internal deframer fifo.
     A reasonable value is 1024.
     @return Returns 0 on success, -1 on error.
 ******************************************************************************/
 int
-Cobs_deframer_init(Cobs_Deframer *deframer, uint16_t buf_depth)
+Cobs_deframer_init(void *self, uint16_t buf_depth)
 {
     int status;
 
+    Cobs_Deframer *deframer = (Cobs_Deframer *)self;
     deframer->state = INIT;
     deframer->work = (uint8_t *)malloc(buf_depth);
     deframer->work_size = buf_depth;

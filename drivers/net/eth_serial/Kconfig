@@ -1,0 +1,16 @@
+config ETH_SERIAL
+	bool "Enables the ethernet serial device based on uart-pipe."
+	default n
+	help
+	  Enable this option to provide ethernet support for the chosen uart.
+
+config ETH_SERIAL_COBS
+	bool
+	default y
+	depends on COBS
+	help
+	  Use Consistent overhead byte stuffing for framing.
+
+module = ETH_SERIAL
+module-str = "eth-serial"
+source "subsys/logging/Kconfig.template.log_config"

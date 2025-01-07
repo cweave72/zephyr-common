@@ -1,0 +1,1 @@
+add_subdirectory_ifdef(CONFIG_ETH_SERIAL eth_serial)
