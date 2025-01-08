@@ -7,7 +7,8 @@ config ETH_SERIAL
 config ETH_SERIAL_COBS
 	bool
 	default y
-	depends on COBS
+	select COBS
+	select SWFIFO
 	help
 	  Use Consistent overhead byte stuffing for framing.
 

@@ -15,31 +15,29 @@
 LOG_MODULE_REGISTER(eth_serial, CONFIG_ETH_SERIAL_LOG_LEVEL);
 
 #if defined(CONFIG_ETH_SERIAL_COBS)
-#include "Cob.h"
+#include "Cobs_frame.h"
 static Cobs_Deframer deframer_state;
 #endif
 
+#define ETH_SERIAL_MTU  1500
 #define MAX_ETHERNET_FRAME_SIZE     (1500 + 18)
 
 /** @brief Maximum buffer size for inbound deframed ethernet packet. */
 static uint8_t buf_deframed[MAX_ETHERNET_FRAME_SIZE];
 
 /** @brief Max framed/byte stuffed buffer to serial port. */
+static uint8_t pktbuf_aggregate[MAX_ETHERNET_FRAME_SIZE];
 static uint8_t buf_framed[2*MAX_ETHERNET_FRAME_SIZE];
 
-static int deframed_size;
+static int packet_count = 0;
+static int frame_size = 0;
 
 #define THREAD_PRIORITY K_PRIO_PREEMPT(8)
 
 /* RX thread */
 static struct k_sem rx_data;
-static K_THREAD_STACK_DEFINE(rx_stack, 1024);
+static K_THREAD_STACK_DEFINE(rx_stack, 2*1024);
 static struct k_thread rx_thread_data;
-
-/* TX thread */
-static struct k_sem tx_data;
-static K_THREAD_STACK_DEFINE(tx_stack, 1024);
-static struct k_thread tx_thread_data;
 
 /******************************************************************************
     recv_cb
@@ -52,8 +50,9 @@ static uint8_t *
 recv_cb(uint8_t *buf, size_t *off)
 {
     struct eth_serial_context *ctx =
-        CONTAINER_OF(buf, struct eth_serial_context, buf[0]);
+        CONTAINER_OF(buf, struct eth_serial_context, serial_buf[0]);
     uint32_t len = *off;
+    int size;
 
     /* We always consume all the data, reset the offset for the next call.*/
     *off = 0;
@@ -64,13 +63,14 @@ recv_cb(uint8_t *buf, size_t *off)
     }
     
     /** @brief Push received byte into the deframer. */
-    deframed_size = ctx->deframer(
+    size = ctx->deframer(
         ctx->deframer_state,
         buf, len,
         buf_deframed, sizeof(buf_deframed));
 
-    if (deframed_size > 0)
+    if (size > 0)
     {
+        frame_size = size;
         k_sem_give(&rx_data);
     }
 
@@ -78,14 +78,57 @@ recv_cb(uint8_t *buf, size_t *off)
 }
 
 /******************************************************************************
-    [docimport rx_thread]
+    [docimport eth_serial_send]
+*//**
+    @brief Sends raw ethernet packet via uart pipe.
+******************************************************************************/
+int
+eth_serial_send(const struct device *dev, struct net_pkt *pkt)
+{
+    struct eth_serial_context *ctx = dev->data;
+    struct net_buf *buf;
+    uint16_t k = 0;
+
+    ARG_UNUSED(dev);
+
+    if (!pkt->buffer)
+    {
+        return -ENODATA;
+    }
+
+    for (buf = pkt->buffer; buf; buf = buf->frags)
+    {
+        uint16_t i;
+        uint8_t *ptr = buf->data;
+
+        LOG_DBG("Send fragment buffer %u bytes.", buf->len);
+        for (i = 0; i < buf->len; i++)
+        {
+            pktbuf_aggregate[k++] = *ptr++;
+        }
+    }
+
+    int size = ctx->framer(pktbuf_aggregate, k, buf_framed, sizeof(buf_framed));
+    if (size <= 0)
+    {
+        return 0;
+    }
+
+    LOG_DBG("Wrote framed %u bytes.", size);
+    uart_pipe_send(buf_framed, size);
+    
+    return 0;
+}
+
+/******************************************************************************
+    rx_thread
 *//**
     @brief Thread which handles processing received raw ethernet frames.
 ******************************************************************************/
 static void
 rx_thread(void *p1, void *p2, void *p3)
 {
-    struct eth_serial_context *ctx = (eth_serial_context *)p1;
+    struct eth_serial_context *ctx = (struct eth_serial_context *)p1;
 
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
@@ -99,12 +142,15 @@ rx_thread(void *p1, void *p2, void *p3)
         int ret;
 
         /* Wait for raw packet to be ready. */
-        k_sem_take(&rx_data, K_FOREVER);
+        if ((ret = k_sem_take(&rx_data, K_FOREVER) < 0))
+        {
+            LOG_ERR("k_sem_take returned %d", ret);
+            k_sem_reset(&rx_data);
+            continue;
+        }
 
-        LOG_DBG("Received message %d bytes.", deframed_size);
-        LOG_HEXDUMP_DBG(buf_deframed, deframed_size, "recv msg"); 
+        LOG_DBG("Received message %d bytes (%u).", frame_size, packet_count++);
 
-#if 0
         pkt = net_pkt_rx_alloc_on_iface(ctx->iface, K_NO_WAIT);
         if (!pkt)
         {
@@ -113,14 +159,14 @@ rx_thread(void *p1, void *p2, void *p3)
         }
 
         pkt_buf = net_pkt_get_frag(pkt, ETH_SERIAL_MTU, K_NO_WAIT);
-        if (!pkt_buff)
+        if (!pkt_buf)
         {
             LOG_ERR("Error allocating network buffer from packet.");
             net_pkt_unref(pkt);
             continue;
         }
 
-        net_pkt_append_buffer(pkt, pkt_buff);
+        net_pkt_append_buffer(pkt, pkt_buf);
 
         /* Load L2 header */
         hdr = NET_ETH_HDR(pkt);
@@ -129,17 +175,15 @@ rx_thread(void *p1, void *p2, void *p3)
         /* Load remaining packet */
         ip = (uint8_t *)net_pkt_data(pkt) + sizeof(struct net_eth_hdr);
         memcpy(ip, buf_deframed + sizeof(struct net_eth_hdr),
-            deframed_size - sizeof(struct net_eth_hdr));
+            frame_size - sizeof(struct net_eth_hdr));
         
         /* Push packet into the stack. */
-        if ((ret = net_recv_data(ctx->iface)) < 0)
+        pkt->buffer->len = frame_size;
+        if ((ret = net_recv_data(ctx->iface, pkt)) < 0)
         {
-            LOG_ERR("Network layer not ready for packet: %d", ret);
+            LOG_ERR("Network layer error: %d", ret);
             net_pkt_unref(pkt);
         }
-
-        LOG_DBG("Packet pushed into network stack.");
-#endif
     }
 }
 
@@ -155,11 +199,13 @@ eth_serial_init(const struct device *dev)
     struct eth_serial_context *ctx = dev->data;
     int ret;
 
+    LOG_INF("Initializing eth_serial driver.");
+
 #if defined(CONFIG_ETH_SERIAL_COBS)
     ctx->framer         = Cobs_framer;
     ctx->deframer       = Cobs_deframer;
     ctx->deframer_state = &deframer_state;
-    if ((ret = Cobs_deframer_init(&deframer_state, 1024)) < 0)
+    if ((ret = Cobs_deframer_init(&deframer_state, 2048)) < 0)
     {
         LOG_ERR("Error initializing Cobs deframer: %d", ret);
         return -1;
@@ -169,17 +215,12 @@ eth_serial_init(const struct device *dev)
     uart_pipe_register(ctx->serial_buf, sizeof(ctx->serial_buf), recv_cb);
 
     k_sem_init(&rx_data, 0, 1);
-    k_sem_init(&tx_data, 0, 1);
 
     k_thread_create(&rx_thread_data, rx_stack,
                     K_THREAD_STACK_SIZEOF(rx_stack),
                     rx_thread,
                     ctx, NULL, NULL, THREAD_PRIORITY, 0, K_NO_WAIT);
 
-    k_thread_create(&tx_thread_data, tx_stack,
-                    K_THREAD_STACK_SIZEOF(tx_stack),
-                    tx_thread,
-                    ctx, NULL, NULL, THREAD_PRIORITY, 0, K_NO_WAIT);
     return 0;
 }
 
@@ -193,6 +234,8 @@ eth_serial_iface_init(struct net_if *iface)
 {
     struct eth_serial_context *ctx = net_if_get_device(iface)->data;
     struct net_linkaddr *ll_addr;
+
+    LOG_DBG("Initializing eth_serial iface.");
 
     ethernet_init(iface);
 
@@ -233,7 +276,6 @@ static const struct ethernet_api eth_serial_api = {
 	.send = eth_serial_send,
 };
 
-#define ETH_SERIAL_MTU  1500
 
 ETH_NET_DEVICE_INIT(eth_serial, "eth_serial",
 		    eth_serial_init, NULL,

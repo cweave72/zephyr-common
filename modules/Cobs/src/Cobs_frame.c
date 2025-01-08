@@ -113,7 +113,8 @@ Cobs_deframer(
             avail = SwFifo_getCount(fifo);
             if (avail == 0)
             {
-                LOG_ERR("No data available.");
+                LOG_ERR("FIND_SOF: Fifo is empty (buf_in_len was %u).", 
+                    buf_in_len);
                 deframer->state = INIT;
                 return 0;
             }
@@ -145,7 +146,7 @@ Cobs_deframer(
             avail = SwFifo_getCount(fifo);
             if (avail == 0)
             {
-                LOG_DBG("FIND_EOF: No data available.");
+                LOG_DBG("FIND_EOF: Fifo is empty.");
                 return 0;
             }
 
@@ -158,7 +159,8 @@ Cobs_deframer(
                 /* Check for work buf overflow */
                 if (deframer->count == work_size)
                 {
-                    LOG_ERR("Overflow searching for EOF.");
+                    LOG_ERR("FIND_EOF: work buffer overflow (size=%u; buf_in_len=%u).",
+                        deframer->count, buf_in_len);
                     deframer->state = ERROR;
                     break;
                 }
@@ -193,7 +195,7 @@ Cobs_deframer(
             num = Cobs_decode(work, deframer->count, buf_out, max_buf_out);
             if (num < 0)
             {
-                LOG_ERR("Error during COBS decode.");
+                LOG_ERR("DECODE: Error during COBS decode :%d", num);
                 deframer->state = ERROR;
                 break;
             }
@@ -234,7 +236,7 @@ Cobs_deframer_init(void *self, uint16_t buf_depth)
     deframer->state = INIT;
     deframer->work = (uint8_t *)malloc(buf_depth);
     deframer->work_size = buf_depth;
-    CHECK_COND_RETURN_MSG(!deframer->work, -1, "Out of memory.");
+    CHECK_COND_RETURN_MSG(!deframer->work, -ENOMEM, "Out of memory.");
 
     /** @brief Initialize the fifo. */
     status = SwFifo_init(

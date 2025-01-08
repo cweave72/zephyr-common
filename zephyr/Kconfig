@@ -1,2 +1,2 @@
-rsource "modules/Kconfig"
-rsource "drivers/Kconfig"
+rsource "../modules/Kconfig"
+rsource "../drivers/Kconfig"
