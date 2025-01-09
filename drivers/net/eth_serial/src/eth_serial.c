@@ -14,30 +14,37 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(eth_serial, CONFIG_ETH_SERIAL_LOG_LEVEL);
 
-#if defined(CONFIG_ETH_SERIAL_COBS)
-#include "Cobs_frame.h"
-static Cobs_Deframer deframer_state;
-#endif
-
 #define ETH_SERIAL_MTU  1500
 #define MAX_ETHERNET_FRAME_SIZE     (1500 + 18)
 
+#if defined(CONFIG_ETH_SERIAL_COBS)
+#include "Cobs_frame.h"
+static Cobs_Deframer deframer_state;
+
 /** @brief Maximum buffer size for inbound deframed ethernet packet. */
 static uint8_t buf_deframed[MAX_ETHERNET_FRAME_SIZE];
-
 /** @brief Max framed/byte stuffed buffer to serial port. */
-static uint8_t pktbuf_aggregate[MAX_ETHERNET_FRAME_SIZE];
 static uint8_t buf_framed[2*MAX_ETHERNET_FRAME_SIZE];
+#endif
 
-static int packet_count = 0;
-static int frame_size = 0;
+static uint8_t pktbuf_aggregate[MAX_ETHERNET_FRAME_SIZE];
 
 #define THREAD_PRIORITY K_PRIO_PREEMPT(8)
 
 /* RX thread */
-static struct k_sem rx_data;
 static K_THREAD_STACK_DEFINE(rx_stack, 2*1024);
 static struct k_thread rx_thread_data;
+
+struct fifo_data_item {
+    void *fifo_rsvd;
+    uint16_t len;
+    uint8_t data[ETH_SERIAL_BUFFER_SIZE];
+};
+
+/* Memory slab for received data:  block size           num align */
+K_MEM_SLAB_DEFINE_STATIC(rx_pool, sizeof(struct fifo_data_item), 5, 4);
+/* RX data fifo */
+K_FIFO_DEFINE(rx_fifo);
 
 /******************************************************************************
     recv_cb
@@ -52,28 +59,29 @@ recv_cb(uint8_t *buf, size_t *off)
     struct eth_serial_context *ctx =
         CONTAINER_OF(buf, struct eth_serial_context, serial_buf[0]);
     uint32_t len = *off;
-    int size;
+    struct fifo_data_item *item;
+    int ret;
 
     /* We always consume all the data, reset the offset for the next call.*/
     *off = 0;
 
     if (!ctx->init_done)
     {
-        return buf;
+        goto done;
     }
-    
-    /** @brief Push received byte into the deframer. */
-    size = ctx->deframer(
-        ctx->deframer_state,
-        buf, len,
-        buf_deframed, sizeof(buf_deframed));
 
-    if (size > 0)
+    if ((ret = k_mem_slab_alloc(&rx_pool, (void **)&item, K_NO_WAIT)) < 0)
     {
-        frame_size = size;
-        k_sem_give(&rx_data);
+        LOG_ERR("Error allocating from slab: %d", ret);
+        goto done; 
     }
 
+    item->len = len;
+    memcpy(item->data, buf, len);
+
+    k_fifo_put(&rx_fifo, item);
+    
+done:
     return buf;
 }
 
@@ -135,21 +143,32 @@ rx_thread(void *p1, void *p2, void *p3)
 
     while (1)
     {
+        struct fifo_data_item *item;
         struct net_pkt *pkt;
         struct net_buf *pkt_buf;
         struct net_eth_hdr *hdr;
         uint8_t *ip;
+        int size;
         int ret;
 
-        /* Wait for raw packet to be ready. */
-        if ((ret = k_sem_take(&rx_data, K_FOREVER) < 0))
+        /* Wait for new data to arrive. */
+        item = k_fifo_get(&rx_fifo, K_FOREVER);
+
+        /** @brief Push received byte into the deframer. */
+        size = ctx->deframer(
+            ctx->deframer_state,
+            item->data, item->len,
+            buf_deframed, sizeof(buf_deframed));
+
+        k_mem_slab_free(&rx_pool, (void *)item);
+
+        if (size <= 0)
         {
-            LOG_ERR("k_sem_take returned %d", ret);
-            k_sem_reset(&rx_data);
+            /* No complete frame yet. */
             continue;
         }
 
-        LOG_DBG("Received message %d bytes (%u).", frame_size, packet_count++);
+        LOG_DBG("Received frame %d bytes.", size);
 
         pkt = net_pkt_rx_alloc_on_iface(ctx->iface, K_NO_WAIT);
         if (!pkt)
@@ -175,10 +194,10 @@ rx_thread(void *p1, void *p2, void *p3)
         /* Load remaining packet */
         ip = (uint8_t *)net_pkt_data(pkt) + sizeof(struct net_eth_hdr);
         memcpy(ip, buf_deframed + sizeof(struct net_eth_hdr),
-            frame_size - sizeof(struct net_eth_hdr));
+            size - sizeof(struct net_eth_hdr));
         
         /* Push packet into the stack. */
-        pkt->buffer->len = frame_size;
+        pkt->buffer->len = size;
         if ((ret = net_recv_data(ctx->iface, pkt)) < 0)
         {
             LOG_ERR("Network layer error: %d", ret);
@@ -214,8 +233,6 @@ eth_serial_init(const struct device *dev)
 
     uart_pipe_register(ctx->serial_buf, sizeof(ctx->serial_buf), recv_cb);
 
-    k_sem_init(&rx_data, 0, 1);
-
     k_thread_create(&rx_thread_data, rx_stack,
                     K_THREAD_STACK_SIZEOF(rx_stack),
                     rx_thread,
@@ -233,7 +250,7 @@ void
 eth_serial_iface_init(struct net_if *iface)
 {
     struct eth_serial_context *ctx = net_if_get_device(iface)->data;
-    struct net_linkaddr *ll_addr;
+    struct net_linkaddr ll_addr;
 
     LOG_DBG("Initializing eth_serial iface.");
 
@@ -245,9 +262,8 @@ eth_serial_iface_init(struct net_if *iface)
     }
 
     ctx->iface = iface;
-    ctx->ll_addr.addr = ctx->mac_addr;
-    ctx->ll_addr.len = sizeof(ctx->mac_addr);
-    ll_addr = &ctx->ll_addr;
+    ll_addr.addr = ctx->mac_addr;
+    ll_addr.len = sizeof(ctx->mac_addr);
     
     ctx->mac_addr[0] = 0x00;
     ctx->mac_addr[1] = 0x00;
@@ -256,7 +272,7 @@ eth_serial_iface_init(struct net_if *iface)
     ctx->mac_addr[4] = 0x53;
     ctx->mac_addr[5] = sys_rand8_get();
 
-    net_if_set_link_addr(iface, ll_addr->addr, ll_addr->len, NET_LINK_ETHERNET);
+    net_if_set_link_addr(iface, ll_addr.addr, ll_addr.len, NET_LINK_ETHERNET);
 
     ctx->init_done = true;
 }
