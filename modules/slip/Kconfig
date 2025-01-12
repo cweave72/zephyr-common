@@ -1,0 +1,9 @@
+config SLIP_FRAME
+	bool "Enable the SLIP (Serial Line Interface) framing library"
+	default n
+	help
+		Encoder and decoder for framing serial streams.
+
+module = SLIP_FRAME
+module-str = "slip_frame"
+source "subsys/logging/Kconfig.template.log_config"

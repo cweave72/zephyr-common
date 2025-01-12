@@ -1,0 +1,6 @@
+- connected: true
+  id: '0001'
+  platform: esp32_devkitc_wroom/esp32/procpu
+  product: CP2102 USB to UART Bridge Controller
+  runner: esp32
+  serial: /dev/ttyUSB0

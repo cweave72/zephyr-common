@@ -17,22 +17,27 @@ LOG_MODULE_REGISTER(eth_serial, CONFIG_ETH_SERIAL_LOG_LEVEL);
 #define ETH_SERIAL_MTU  1500
 #define MAX_ETHERNET_FRAME_SIZE     (1500 + 18)
 
-#if defined(CONFIG_ETH_SERIAL_COBS)
+#if defined(CONFIG_ETH_SERIAL_SLIP)
+#include "slip.h"
+static slip_deframer_ctx deframer_state;
+
+#elif defined(CONFIG_ETH_SERIAL_COBS)
 #include "Cobs_frame.h"
 static Cobs_Deframer deframer_state;
+#endif
 
 /** @brief Maximum buffer size for inbound deframed ethernet packet. */
 static uint8_t buf_deframed[MAX_ETHERNET_FRAME_SIZE];
 /** @brief Max framed/byte stuffed buffer to serial port. */
 static uint8_t buf_framed[2*MAX_ETHERNET_FRAME_SIZE];
-#endif
 
 static uint8_t pktbuf_aggregate[MAX_ETHERNET_FRAME_SIZE];
+static int packet_count = 0;
 
 #define THREAD_PRIORITY K_PRIO_PREEMPT(8)
 
 /* RX thread */
-static K_THREAD_STACK_DEFINE(rx_stack, 2*1024);
+static K_THREAD_STACK_DEFINE(rx_stack, 1024);
 static struct k_thread rx_thread_data;
 
 struct fifo_data_item {
@@ -168,7 +173,8 @@ rx_thread(void *p1, void *p2, void *p3)
             continue;
         }
 
-        LOG_DBG("Received frame %d bytes.", size);
+        LOG_DBG("Received frame %d bytes (%u).", size, packet_count++);
+        //LOG_HEXDUMP_DBG(buf_deframed, size, "deframed");
 
         pkt = net_pkt_rx_alloc_on_iface(ctx->iface, K_NO_WAIT);
         if (!pkt)
@@ -220,10 +226,21 @@ eth_serial_init(const struct device *dev)
 
     LOG_INF("Initializing eth_serial driver.");
 
-#if defined(CONFIG_ETH_SERIAL_COBS)
+    ctx->deframer_state = &deframer_state;
+
+#if defined(CONFIG_ETH_SERIAL_SLIP)
+    LOG_INF("Using SLIP framing.");
+    ctx->framer         = slip_framer;
+    ctx->deframer       = slip_deframer;
+    if ((ret = slip_deframer_init(&deframer_state, 2048)) < 0)
+    {
+        LOG_ERR("Error initializing slip deframer: %d", ret);
+        return -1;
+    }
+#elif defined(CONFIG_ETH_SERIAL_COBS)
+    LOG_INF("Using COBS framing.");
     ctx->framer         = Cobs_framer;
     ctx->deframer       = Cobs_deframer;
-    ctx->deframer_state = &deframer_state;
     if ((ret = Cobs_deframer_init(&deframer_state, 2048)) < 0)
     {
         LOG_ERR("Error initializing Cobs deframer: %d", ret);

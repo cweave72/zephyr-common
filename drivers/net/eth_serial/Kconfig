@@ -4,13 +4,22 @@ config ETH_SERIAL
 	help
 	  Enable this option to provide ethernet support for the chosen uart.
 
+config ETH_SERIAL_SLIP
+	bool "Enable SLIP framing."
+	default n
+	select SLIP_FRAME
+	select SWFIFO
+	help
+	  Use SLIP for framing.
+
 config ETH_SERIAL_COBS
-	bool
-	default y
+	bool "Enable COBS framing."
+	default n
 	select COBS
 	select SWFIFO
 	help
 	  Use Consistent overhead byte stuffing for framing.
+
 
 module = ETH_SERIAL
 module-str = "eth-serial"

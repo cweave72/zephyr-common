@@ -1,0 +1,6 @@
+tests:
+  slip_tests.test_simple_framer:
+    platform_allow:
+      - qemu_x86
+      - esp32_devkitc_wroom/esp32/procpu
+    tags: slip
