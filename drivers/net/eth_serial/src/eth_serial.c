@@ -43,10 +43,10 @@ static struct k_thread rx_thread_data;
 struct fifo_data_item {
     void *fifo_rsvd;
     uint16_t len;
-    uint8_t data[ETH_SERIAL_BUFFER_SIZE];
+    uint8_t msg[sizeof(buf_deframed)];
 };
 
-/* Memory slab for received data:  block size           num align */
+/* Memory slab for received data:  block size                  num align */
 K_MEM_SLAB_DEFINE_STATIC(rx_pool, sizeof(struct fifo_data_item), 5, 4);
 /* RX data fifo */
 K_FIFO_DEFINE(rx_fifo);
@@ -65,7 +65,7 @@ recv_cb(uint8_t *buf, size_t *off)
         CONTAINER_OF(buf, struct eth_serial_context, serial_buf[0]);
     uint32_t len = *off;
     struct fifo_data_item *item;
-    int ret;
+    int size, ret;
 
     /* We always consume all the data, reset the offset for the next call.*/
     *off = 0;
@@ -75,16 +75,25 @@ recv_cb(uint8_t *buf, size_t *off)
         goto done;
     }
 
-    if ((ret = k_mem_slab_alloc(&rx_pool, (void **)&item, K_NO_WAIT)) < 0)
+    /** @brief Push received byte into the deframer. */
+    size = ctx->deframer(
+        ctx->deframer_state,
+        buf, len,
+        buf_deframed, sizeof(buf_deframed));
+
+    if (size > 0)
     {
-        LOG_ERR("Error allocating from slab: %d", ret);
-        goto done; 
+        if ((ret = k_mem_slab_alloc(&rx_pool, (void **)&item, K_NO_WAIT)) < 0)
+        {
+            LOG_ERR("Error allocating from slab (size %u bytes): %d", size, ret);
+            goto done; 
+        }
+
+        item->len = size;
+        memcpy(item->msg, buf_deframed, size);
+
+        k_fifo_put(&rx_fifo, item);
     }
-
-    item->len = len;
-    memcpy(item->data, buf, len);
-
-    k_fifo_put(&rx_fifo, item);
     
 done:
     return buf;
@@ -153,27 +162,12 @@ rx_thread(void *p1, void *p2, void *p3)
         struct net_buf *pkt_buf;
         struct net_eth_hdr *hdr;
         uint8_t *ip;
-        int size;
         int ret;
 
         /* Wait for new data to arrive. */
         item = k_fifo_get(&rx_fifo, K_FOREVER);
 
-        /** @brief Push received byte into the deframer. */
-        size = ctx->deframer(
-            ctx->deframer_state,
-            item->data, item->len,
-            buf_deframed, sizeof(buf_deframed));
-
-        k_mem_slab_free(&rx_pool, (void *)item);
-
-        if (size <= 0)
-        {
-            /* No complete frame yet. */
-            continue;
-        }
-
-        LOG_DBG("Received frame %d bytes (%u).", size, packet_count++);
+        LOG_DBG("Received frame %d bytes (%u).", item->len, packet_count++);
         //LOG_HEXDUMP_DBG(buf_deframed, size, "deframed");
 
         pkt = net_pkt_rx_alloc_on_iface(ctx->iface, K_NO_WAIT);
@@ -195,20 +189,22 @@ rx_thread(void *p1, void *p2, void *p3)
 
         /* Load L2 header */
         hdr = NET_ETH_HDR(pkt);
-        memcpy(hdr, buf_deframed, sizeof(struct net_eth_hdr));
+        memcpy(hdr, item->msg, sizeof(struct net_eth_hdr));
 
         /* Load remaining packet */
         ip = (uint8_t *)net_pkt_data(pkt) + sizeof(struct net_eth_hdr);
-        memcpy(ip, buf_deframed + sizeof(struct net_eth_hdr),
-            size - sizeof(struct net_eth_hdr));
+        memcpy(ip, item->msg + sizeof(struct net_eth_hdr),
+            item->len - sizeof(struct net_eth_hdr));
         
         /* Push packet into the stack. */
-        pkt->buffer->len = size;
+        pkt->buffer->len = item->len;
         if ((ret = net_recv_data(ctx->iface, pkt)) < 0)
         {
             LOG_ERR("Network layer error: %d", ret);
             net_pkt_unref(pkt);
         }
+
+        k_mem_slab_free(&rx_pool, (void *)item);
     }
 }
 
