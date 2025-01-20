@@ -47,7 +47,7 @@ struct fifo_data_item {
 };
 
 /* Memory slab for received data:  block size                  num align */
-K_MEM_SLAB_DEFINE_STATIC(rx_pool, sizeof(struct fifo_data_item), 5, 4);
+K_MEM_SLAB_DEFINE_STATIC(rx_pool, sizeof(struct fifo_data_item), 10, 4);
 /* RX data fifo */
 K_FIFO_DEFINE(rx_fifo);
 
@@ -305,9 +305,20 @@ static const struct ethernet_api eth_serial_api = {
 	.send = eth_serial_send,
 };
 
+/** @brief The initialization level is set to be after
+    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT (=40) to ensure that we register the
+    uart-pipe after the slip driver (INIT_PRIORITY_DEVICE is 50).
+    This is necessary for emulation with QEMU since the qemu_x86 target enables
+    the built-in slip driver by default and the slip driver will occasionally be
+    initialized after this device and steal the uart-pipe receive callback
+    function. We must let QEMU assume SLIP networking since this allows us to
+    use the default device /tmp/slip.dev to provide the interface to the host.
+*/
+#define ETH_SERIAL_INIT_PRIORITY    CONFIG_KERNEL_INIT_PRIORITY_DEVICE
+
 
 ETH_NET_DEVICE_INIT(eth_serial, "eth_serial",
 		    eth_serial_init, NULL,
 		    &eth_serial_ctx_data, NULL,
-		    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+		    ETH_SERIAL_INIT_PRIORITY,
 		    &eth_serial_api, ETH_SERIAL_MTU);
