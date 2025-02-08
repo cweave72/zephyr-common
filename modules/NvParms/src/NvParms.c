@@ -93,7 +93,6 @@ int
 NvParms_load(const char *name, uint8_t type, void *dest, size_t len)
 {
     int rc;
-    enum value_types value_type = type;
 
     struct read_callback_params params = {
         .dest          = dest,

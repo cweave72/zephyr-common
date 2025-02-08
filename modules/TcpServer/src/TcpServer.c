@@ -165,8 +165,11 @@ TcpServer_init(
     }
     server->data_len = buf_len;
 
-    rc = TcpSocket_init(tcp, port);
-    CHECK_COND_RETURN_MSG(rc < 0, rc, "Error initializing server.");
+    rc = TcpSocket_init(tcp);
+    CHECK_COND_RETURN(rc < 0, rc);
+
+    rc = TcpSocket_bind(tcp, port);
+    CHECK_COND_RETURN(rc < 0, rc);
 
     rc = RTOS_TASK_CREATE_DYNAMIC(
         &task->handle,

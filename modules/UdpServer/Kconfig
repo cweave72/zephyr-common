@@ -1,0 +1,8 @@
+config UDPSERVER
+	bool "Enable the UdpServer lib"
+	depends on UDPSOCKET
+
+module = UDPSERVER
+module-str = "UdpServer"
+source "subsys/logging/Kconfig.template.log_config"
+

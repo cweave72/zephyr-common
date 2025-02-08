@@ -1,0 +1,41 @@
+config MQTTCLIENT
+	bool "Enable the MqttClient lib"
+	depends on MQTT_LIB
+
+config MQTTCLIENT_SERVER_PORT
+	int "Port for the mqtt server."
+	default 1883
+
+config MQTTCLIENT_SERVER_ADDR
+	string "IP"
+	help
+	  IP addr for the broker.
+
+config MQTTCLIENT_POLL_TIMEOUT_MS
+	int "Timeout, ms for receive polling."
+	default 1000
+
+config MQTTCLIENT_PUBLISH_RX_BUFFER_SIZE
+	int "Buffer size for reading received publish messages."
+	default 256
+
+config MQTTCLIENT_RX_BUFFER_SIZE
+	int "Buffer size for rx messages."
+	default 256
+
+config MQTTCLIENT_TX_BUFFER_SIZE
+	int "Buffer size for rx messages."
+	default 256
+
+config MQTTCLIENT_STACK_SIZE
+	int "Stack size for the MqttClient thread."
+	default 4096
+
+config MQTTCLIENT_THREAD_PRIO
+	int "Thread priority for the MqttClient thread."
+	default 30
+
+module = MQTTCLIENT
+module-str = "MqttClient"
+source "subsys/logging/Kconfig.template.log_config"
+

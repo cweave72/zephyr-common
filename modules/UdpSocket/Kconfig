@@ -1,0 +1,7 @@
+config UDPSOCKET
+	bool "Enable the UdpSocket lib"
+
+module = UDPSOCKET
+module-str = "UdpSocket"
+source "subsys/logging/Kconfig.template.log_config"
+

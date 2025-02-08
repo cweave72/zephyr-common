@@ -1,0 +1,23 @@
+config ECHOSERVER
+	bool "Enable the EchoServer lib"
+
+choice ECHOSERVER_TRANSPORT
+	bool "Transport for EchoServer"
+	default ECHOSERVER_TRANSPORT_UDP
+
+config ECHOSERVER_TRANSPORT_UDP
+	bool "Use UDP for the transport"
+	depends on UDPSOCKET
+	depends on UDPSERVER
+
+config ECHOSERVER_TRANSPORT_TCP
+	bool "Use TCP for the transport"
+	depends on TCPSOCKET
+	depends on TCPSERVER
+
+endchoice
+
+module = ECHOSERVER
+module-str = "EchoServer"
+source "subsys/logging/Kconfig.template.log_config"
+

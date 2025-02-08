@@ -171,37 +171,80 @@ TcpSocket_accept(TcpSocket *tcp, int keepIdle, int keepInterval, int keepCount)
 }
 
 /******************************************************************************
-    [docimport TcpSocket_init]
+    [docimport TcpSocket_bind]
 *//**
-    @brief Initializes a TCP socket.
-
-    @param[in] tcp  Pointer to TcpSocket object (uninitialized).
+    @brief Binds a socket to any local address. (server use).
+    Called after TcpSocket_init.
+    @param[in] tcp  Pointer to TcpSocket object (initialized).
     @param[in] port  Port number to use.
-    @return Returns 0 on success, negative on error.
 ******************************************************************************/
 int
-TcpSocket_init(TcpSocket *tcp, uint16_t port)
+TcpSocket_bind(TcpSocket *tcp, uint16_t port)
 {
     struct sockaddr_in *dest_ip4 = &tcp->dest_addr;
-    int sock, err;
 
     tcp->port = port;
 
     dest_ip4->sin_addr.s_addr = (uint32_t)INADDR_ANY;  /* 0.0.0.0 */
     dest_ip4->sin_family = AF_INET;
     dest_ip4->sin_port = htons(port);   /* Note an endian swap occurs here */
-
-    sock = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    CHECK_COND_RETURN_MSG(sock < 0, sock, "Error creating socket.");
-    LOG_INF("Socket created successfully.");
-    tcp->sock = sock;
     
-    err = zsock_bind(
-        sock,
+    int err = zsock_bind(
+        tcp->sock,
         (struct sockaddr *)dest_ip4,
         sizeof(struct sockaddr_in));
     CHECK_COND_RETURN_MSG(err < 0, err, "Error binding socket.");
     LOG_INF("Socket bound to port %d", port);
+    return 0;
+}
 
+/******************************************************************************
+    [docimport TcpSocket_connect]
+*//**
+    @brief Connect to a peer. (client use).
+    Called after TcpSocket_init.
+    @param[in] tcp  Pointer to TcpSocket object (initialized).
+    @param[in] ip  IP address of peer.
+    @param[in] port  Port number to use.
+******************************************************************************/
+int
+TcpSocket_connect(TcpSocket *tcp, const char *ip, uint16_t port)
+{
+    struct sockaddr_in *dest_ip4 = &tcp->dest_addr;
+
+    tcp->port = port;
+
+    inet_pton(AF_INET, ip, &dest_ip4->sin_addr);
+    dest_ip4->sin_family = AF_INET;
+    dest_ip4->sin_port = htons(port);   /* Note an endian swap occurs here */
+    
+    int err = zsock_connect(
+        tcp->sock,
+        (struct sockaddr *)dest_ip4,
+        sizeof(struct sockaddr_in));
+    CHECK_COND_RETURN_MSG(err < 0, err, "Error connecting to peer.");
+    LOG_INF("Socket connected to %s:%u", ip, port);
+    return 0;
+}
+
+/******************************************************************************
+    [docimport TcpSocket_init]
+*//**
+    @brief Initializes a TCP socket.
+    Follow this with calls to:
+    TcpSocket_connect (client)
+    TcpSocket_bind    (server)
+
+    @param[in] tcp  Pointer to TcpSocket object (uninitialized).
+    @return Returns 0 on success, negative on error.
+******************************************************************************/
+int
+TcpSocket_init(TcpSocket *tcp)
+{
+    int sock = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    CHECK_COND_RETURN_MSG(sock < 0, sock, "Error creating socket.");
+    LOG_INF("Socket created successfully.");
+    tcp->sock = sock;
+    
     return 0;
 }

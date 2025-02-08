@@ -19,11 +19,11 @@
 /** @brief Initialize the logging module. */
 LOG_MODULE_REGISTER(WS2812Led, CONFIG_WS2812LED_LOG_LEVEL);
 
-#define GET_RANDOM_HSV()        (CHSV){ RANDOM8(), RANDOM8(), RANDOM8() }
-#define GET_RANDOM_HUE(s, v)    (CHSV){ RANDOM8(), (s), (v) }
-#define GET_RANDOM_VAL(h, s)    (CHSV){ (h), (s), RANDOM8() }
-#define GET_RANDOM_SAT(h, v)    (CHSV){ (h), RANDOM8(), (v) }
-#define GET_RANDOM_SATVAL(h)    (CHSV){ (h), RANDOM8(), RANDOM8() }
+#define GET_RANDOM_HSV()        (CHSV){ RANDOM_U8(), RANDOM_U8(), RANDOM_U8() }
+#define GET_RANDOM_HUE(s, v)    (CHSV){ RANDOM_U8(), (s), (v) }
+#define GET_RANDOM_VAL(h, s)    (CHSV){ (h), (s), RANDOM_U8() }
+#define GET_RANDOM_SAT(h, v)    (CHSV){ (h), RANDOM_U8(), (v) }
+#define GET_RANDOM_SATVAL(h)    (CHSV){ (h), RANDOM_U8(), RANDOM_U8() }
 
 /** @brief Computes u[8 0]*u[8 8] -> u[8 0] */
 #define SCALE8(x, scale)        ((uint8_t)(((uint16_t)(x) * (scale)) >> 8))
@@ -600,7 +600,7 @@ twinkle(
     if (SwTimer_test(&seg->timer))
     {
         SwTimer_setMs(&seg->timer, seg->timer_period_ms);
-        idx = RANDOM(uint16_t, seg->numPixels);
+        idx = RANDOM_UINT(uint16_t, seg->numPixels);
         seg->pixels[idx] = GET_RANDOM_HSV();
         
         count++;
@@ -661,7 +661,7 @@ sparkle(
 
         for (int i = 0; i < num; i++)
         {
-            idx = RANDOM(uint16_t, seg->numPixels);
+            idx = RANDOM_UINT(uint16_t, seg->numPixels);
             if (c)
             {
                 seg->pixels[idx] = GET_RANDOM_SATVAL(c->h);
@@ -728,7 +728,7 @@ fire(
         /* Cool down every pixel a little */
         for (i = 0; i < seg->numPixels; i++)
         {
-            randu8 = RANDOM(uint8_t, ((cool*10)/seg->numPixels) + 2);
+            randu8 = RANDOM_UINT(uint8_t, ((cool*10)/seg->numPixels) + 2);
             heat[i] = SUB_SAFE(heat[i], randu8);
             //LOG_INF("randu8 = %u, heat[%u]=%u",
             //    (unsigned int)randu8, i, (unsigned int)heat[i]);
@@ -741,12 +741,12 @@ fire(
         }
 
         /* Randomly ignite new 'sparks' of heat near the bottom */
-        if (RANDOM8() < spark)
+        if (RANDOM_U8() < spark)
         {
             /** @todo Change 7 to be a function of numPixels, this will break if
                   segment has less than 8 leds. */
-            randu8 = RANDOM(uint8_t, 7); //!!!!!!!!!!
-            randrange = RANDOM8_RANGE(160, 255);
+            randu8 = RANDOM_UINT(uint8_t, 7); //!!!!!!!!!!
+            randrange = RANDOM_U8_RANGE(160, 255);
             heat[randu8] = ADD8_SAFE(heat[randu8], randrange);
             //LOG_INF("randrange = %u, heat[%u]=%u",
             //    (unsigned int)randrange, (unsigned int)randu8,
@@ -824,7 +824,7 @@ dissolve(
         /*  Fade all pixels by the decay factor. */
         for (j = 0; j < seg->numPixels; j++)
         {
-            if (RANDOM(uint8_t, 100) > (100 - prob))
+            if (RANDOM_UINT(uint8_t, 100) > (100 - prob))
             {
                 fadePixel(seg, (uint16_t)j, decay);
             }
@@ -901,7 +901,7 @@ meteor(
         */
         for (int j = 0; j < seg->numPixels; j++)
         {
-            if ((!decayrandom) || (RANDOM(uint8_t, 100) > 60))
+            if ((!decayrandom) || (RANDOM_UINT(uint8_t, 100) > 60))
             {
                 fadePixel(seg, (uint16_t)j, mdecay);
             }

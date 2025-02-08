@@ -34,7 +34,7 @@ typedef struct TcpSocket
 /******************************************************************************
     [docexport TcpSocket_read]
 *//**
-    @brief Reads from socket.
+    @brief Reads data from socket.
 
     @param[in] sock  The active socket descriptor to read from.
     @param[in] buf  Pointer to read buffer.
@@ -47,7 +47,7 @@ TcpSocket_read(int sock, uint8_t *buf, uint16_t buf_size);
 /******************************************************************************
     [docexport TcpSocket_write]
 *//**
-    @brief Writes to socket.
+    @brief Sends data to socket.
 
     @param[in] sock  The active socket descriptor to write to.
     @param[in] data  Pointer to data buffer.
@@ -108,14 +108,39 @@ int
 TcpSocket_accept(TcpSocket *tcp, int keepIdle, int keepInterval, int keepCount);
 
 /******************************************************************************
+    [docexport TcpSocket_bind]
+*//**
+    @brief Binds a socket to any local address. (server use).
+    Called after TcpSocket_init.
+    @param[in] tcp  Pointer to TcpSocket object (initialized).
+    @param[in] port  Port number to use.
+******************************************************************************/
+int
+TcpSocket_bind(TcpSocket *tcp, uint16_t port);
+
+/******************************************************************************
+    [docexport TcpSocket_connect]
+*//**
+    @brief Connect to a peer. (client use).
+    Called after TcpSocket_init.
+    @param[in] tcp  Pointer to TcpSocket object (initialized).
+    @param[in] ip  IP address of peer.
+    @param[in] port  Port number to use.
+******************************************************************************/
+int
+TcpSocket_connect(TcpSocket *tcp, const char *ip, uint16_t port);
+
+/******************************************************************************
     [docexport TcpSocket_init]
 *//**
     @brief Initializes a TCP socket.
+    Follow this with calls to:
+    TcpSocket_connect (client)
+    TcpSocket_bind    (server)
 
     @param[in] tcp  Pointer to TcpSocket object (uninitialized).
-    @param[in] port  Port number to use.
     @return Returns 0 on success, negative on error.
 ******************************************************************************/
 int
-TcpSocket_init(TcpSocket *tcp, uint16_t port);
+TcpSocket_init(TcpSocket *tcp);
 #endif
