@@ -6,8 +6,8 @@
 #include <string.h>
 #include <zephyr/logging/log.h>
 #include "PbGeneric.h"
-#include "ProtoRpc.pb.h"
 #include "ProtoRpc.h"
+#include "ProtoRpcHeader.pb.h"
 
 LOG_MODULE_REGISTER(ProtoRpc, CONFIG_PROTORPC_LOG_LEVEL);
 

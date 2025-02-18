@@ -7,7 +7,7 @@
 #define PROTORPC_H
 #include <stddef.h>
 #include <stdint.h>
-#include "ProtoRpc.pb.h"
+#include "ProtoRpcHeader.pb.h"
 
 /** @brief Max size of a ProtoRpc message */
 #define PROTORPC_MSG_MAX_SIZE    4096

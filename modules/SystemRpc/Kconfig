@@ -1,0 +1,9 @@
+config SYSTEMRPC
+	bool "Enable the SystemRpc lib."
+	depends on NANOPB
+	depends on PBGENERIC
+	depends on PROTORPC
+
+module = SYSTEMRPC
+module-str = "SystemRpc"
+source "subsys/logging/Kconfig.template.log_config"

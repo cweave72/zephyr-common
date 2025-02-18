@@ -1,11 +1,12 @@
-if (CONFIG_TESTRPC)
-    set(name TestRpc)
+if (CONFIG_SYSTEMRPC)
+    set(name SystemRpc)
 
     zephyr_include_directories(include)
     zephyr_library_sources("src/${name}.c")
 
     # Below adds a custom command for generating the handler C api.
-    set(proto_file $ENV{BASEDIR}/proto/${name}/${name}.proto)
+    #set(proto_file $ENV{BASEDIR}/common/proto/${name}/${name}.proto)
+    set(proto_file $ENV{PROTO_BASE}/${name}/${name}.proto)
     set(handler_source_output build/${name}.c)
 
     add_custom_command(
