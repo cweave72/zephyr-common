@@ -1,0 +1,6 @@
+tests:
+  circbuffer_tests.test_circbuffer_writes:
+    platform_allow:
+      - qemu_x86
+      - esp32_devkitc_wroom/esp32/procpu
+    tags: circbuffer

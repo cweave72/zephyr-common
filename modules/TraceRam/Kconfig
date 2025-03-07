@@ -1,0 +1,12 @@
+config TRACERAM
+	bool "Enable the TraceRam lib"
+	depends on CIRCBUFFER
+	depends on SWFIFO
+
+config TRACERAM_DEPTH
+	int "Depth of the TraceRam circular buffer."
+	default 4096
+
+module = TRACERAM
+module-str = "TraceRam"
+source "subsys/logging/Kconfig.template.log_config"

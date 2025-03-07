@@ -1,0 +1,8 @@
+config CIRCBUFFER
+	bool "Enable the CircularBuffer lib"
+	depends on SWFIFO
+
+module = CIRCBUFFER
+module-str = "CircBuffer"
+source "subsys/logging/Kconfig.template.log_config"
+

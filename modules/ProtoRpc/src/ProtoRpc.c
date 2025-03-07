@@ -153,7 +153,7 @@ ProtoRpc_exec(
     Pb_pack_delimited(&ostream, &reply_header, ProtoRpcHeader_fields);
     Pb_pack_delimited(&ostream, callset_reply_buf, callset_fields);
 
-    //LOG_DBG("ostream bytes (after callset): %u", ostream.bytes_written);
+    LOG_DBG("reply ostream bytes (after callset): %u", ostream.bytes_written);
     //LOG_HEXDUMP_DBG(reply_buf, ostream.bytes_written, "Reply frame");
 
     *reply_encoded_size = ostream.bytes_written;

@@ -4,6 +4,7 @@
  *  @brief: A simple software fifo for storing arbitrary objects.
 *******************************************************************************/
 #include <string.h>
+#include <errno.h>
 #include <zephyr/logging/log.h>
 #include "SwFifo.h"
 #include "CheckCond.h"
@@ -19,7 +20,7 @@ do {                                    \
     }                                   \
 } while (0)
 
-/** @brief Increments the write index with circular wrap. */
+/** @brief Increments the read index with circular wrap. */
 #define inc_rdIdx(pf, n)                \
 do {                                    \
     (pf)->rdIdx += (n);                 \
@@ -368,7 +369,7 @@ SwFifo_init(
 
     if (mem)
     {
-        CHECK_COND_RETURN_MSG(memSize != (depth+1)*itemSize, -1,
+        CHECK_COND_RETURN_MSG(memSize != (depth+1)*itemSize, -EINVAL,
             "Invalid statically allocated memory size");
         fifo->mem = mem;
     }
@@ -377,7 +378,7 @@ SwFifo_init(
         /*  Allocate the fifo memory. The actual memory allocated is one larger
             than the depth requested to make determining full and empty easy. */
         fifo->mem = (uint8_t *)malloc((depth + 1) * itemSize);
-        CHECK_COND_RETURN_MSG(!fifo->mem, -1, "Could not allocate fifo memory");
+        CHECK_COND_RETURN_MSG(!fifo->mem, -ENOMEM, "Could not allocate fifo memory");
     }
 
     if (fifo->threadsafe)

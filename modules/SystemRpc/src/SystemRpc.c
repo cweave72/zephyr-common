@@ -7,6 +7,7 @@
 #include "SystemRpc.h"
 #include "SystemRpc.pb.h"
 #include "pb.h"
+#include "TraceRam.h"
 
 LOG_MODULE_REGISTER(SystemRpc, CONFIG_SYSTEMRPC_LOG_LEVEL);
 
@@ -62,44 +63,152 @@ dumpmem(void *call_frame, void *reply_frame, StatusEnum *status)
 }
 
 /******************************************************************************
-    gettraceramaddr
+    gettraceramstatus
 
     Call params:
     Reply params:
-        reply->address: uint32 
-        reply->size: uint32 
+        reply->state: bool 
+        reply->count: uint32 
 *//**
-    @brief Implements the RPC gettraceramaddr handler.
+    @brief Implements the RPC gettraceramstatus handler.
 ******************************************************************************/
 static void
-gettraceramaddr(void *call_frame, void *reply_frame, StatusEnum *status)
+gettraceramstatus(void *call_frame, void *reply_frame, StatusEnum *status)
 {
     system_SystemCallset *call_msg = (system_SystemCallset *)call_frame;
     system_SystemCallset *reply_msg = (system_SystemCallset *)reply_frame;
-    system_GetTraceRamAddr_call *call = &call_msg->msg.gettraceramaddr_call;
-    system_GetTraceRamAddr_reply *reply = &reply_msg->msg.gettraceramaddr_reply;
+    system_GetTraceRamStatus_call *call = &call_msg->msg.gettraceramstatus_call;
+    system_GetTraceRamStatus_reply *reply = &reply_msg->msg.gettraceramstatus_reply;
 
     (void)call;
     (void)reply;
 
-    LOG_DBG("In gettraceramaddr handler");
+    LOG_DBG("In gettraceramstatus handler");
 
-    reply_msg->which_msg = system_SystemCallset_gettraceramaddr_reply_tag;
+    reply_msg->which_msg = system_SystemCallset_gettraceramstatus_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
-#if defined(CONFIG_TRACING_BACKEND_RAM)
-    reply->address = (uint32_t)ram_tracing;
-    reply->size = RAM_TRACEBUFFER_SIZE;
-#else
-    reply->address = 0;
-    reply->size = 0;
-#endif
+    reply->state = TraceRam_getState();
+    reply->count = TraceRam_getCount();
 }
+
+/******************************************************************************
+    enabletraceram
+
+    Call params:
+    Reply params:
+        reply->state: bool 
+*//**
+    @brief Implements the RPC enabletraceram handler.
+******************************************************************************/
+static void
+enabletraceram(void *call_frame, void *reply_frame, StatusEnum *status)
+{
+    system_SystemCallset *call_msg = (system_SystemCallset *)call_frame;
+    system_SystemCallset *reply_msg = (system_SystemCallset *)reply_frame;
+    system_EnableTraceRam_call *call = &call_msg->msg.enabletraceram_call;
+    system_EnableTraceRam_reply *reply = &reply_msg->msg.enabletraceram_reply;
+
+    (void)call;
+    (void)reply;
+
+    LOG_DBG("In enabletraceram handler");
+
+    reply_msg->which_msg = system_SystemCallset_enabletraceram_reply_tag;
+    *status = StatusEnum_RPC_SUCCESS;
+
+    TraceRam_enable();
+    reply->state = TraceRam_getState();
+}
+
+/******************************************************************************
+    disabletraceram
+
+    Call params:
+    Reply params:
+        reply->state: bool 
+*//**
+    @brief Implements the RPC disabletraceram handler.
+******************************************************************************/
+static void
+disabletraceram(void *call_frame, void *reply_frame, StatusEnum *status)
+{
+    system_SystemCallset *call_msg = (system_SystemCallset *)call_frame;
+    system_SystemCallset *reply_msg = (system_SystemCallset *)reply_frame;
+    system_DisableTraceRam_call *call = &call_msg->msg.disabletraceram_call;
+    system_DisableTraceRam_reply *reply = &reply_msg->msg.disabletraceram_reply;
+
+    (void)call;
+    (void)reply;
+
+    LOG_DBG("In disabletraceram handler");
+
+    reply_msg->which_msg = system_SystemCallset_disabletraceram_reply_tag;
+    *status = StatusEnum_RPC_SUCCESS;
+
+    TraceRam_disable();
+    reply->state = TraceRam_getState();
+}
+
+/******************************************************************************
+    getnexttraceram
+
+    Call params:
+        call->max_size: uint32 
+    Reply params:
+        reply->empty_on_read: bool 
+        reply->data: bytes 
+*//**
+    @brief Implements the RPC getnexttraceram handler.
+******************************************************************************/
+static void
+getnexttraceram(void *call_frame, void *reply_frame, StatusEnum *status)
+{
+    system_SystemCallset *call_msg = (system_SystemCallset *)call_frame;
+    system_SystemCallset *reply_msg = (system_SystemCallset *)reply_frame;
+    system_GetNextTraceRam_call *call = &call_msg->msg.getnexttraceram_call;
+    system_GetNextTraceRam_reply *reply = &reply_msg->msg.getnexttraceram_reply;
+    int num_read = 0;
+
+    (void)call;
+    (void)reply;
+
+    LOG_DBG("In getnexttraceram handler");
+
+    reply_msg->which_msg = system_SystemCallset_getnexttraceram_reply_tag;
+    *status = StatusEnum_RPC_SUCCESS;
+
+    reply->empty_on_read = false;
+
+    if (TraceRam_getCount() == 0)
+    {
+        LOG_DBG("TraceRam is empty.");
+        reply->data.size = 0;
+        return;
+    }
+
+    num_read = TraceRam_read(reply->data.bytes, call->max_size);
+    if (num_read <= 0)
+    {
+        LOG_ERR("TraceRam error: %d", num_read);
+        *status = StatusEnum_RPC_HANDLER_ERROR;
+        reply->data.size = 0;
+        return;
+    }
+
+    reply->data.size = num_read;
+    reply->empty_on_read = (TraceRam_getCount() == 0) ? true : false;
+    LOG_DBG("Total read: %u; empty_on_read: %u", num_read, reply->empty_on_read);
+}
+
 
 
 static ProtoRpc_Handler_Entry handlers[] = {
     PROTORPC_ADD_HANDLER(system_SystemCallset_dumpmem_call_tag, dumpmem),
-    PROTORPC_ADD_HANDLER(system_SystemCallset_gettraceramaddr_call_tag, gettraceramaddr),
+    PROTORPC_ADD_HANDLER(system_SystemCallset_gettraceramstatus_call_tag, gettraceramstatus),
+    PROTORPC_ADD_HANDLER(system_SystemCallset_enabletraceram_call_tag, enabletraceram),
+    PROTORPC_ADD_HANDLER(system_SystemCallset_disabletraceram_call_tag, disabletraceram),
+    PROTORPC_ADD_HANDLER(system_SystemCallset_getnexttraceram_call_tag, getnexttraceram),
 };
 
 #define NUM_HANDLERS    PROTORPC_ARRAY_LENGTH(handlers)
