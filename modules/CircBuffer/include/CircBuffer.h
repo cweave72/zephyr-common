@@ -8,11 +8,9 @@
 
 #include <stdint.h>
 #include <zephyr/kernel.h>
-#include "SwFifo.h"
 
 typedef struct CircBuffer
 {
-    SwFifo hist_fifo;
     uint8_t *hist_fifo_mem;
     uint8_t *buf;
     uint32_t buf_size;
@@ -71,6 +69,22 @@ int
 CircBuffer_read(CircBuffer *circ, uint8_t *buf, uint32_t req_size);
 
 /******************************************************************************
+    [docexport CircBuffer_lock]
+*//**
+    @brief Lock the circular buffer.
+******************************************************************************/
+void
+CircBuffer_lock(CircBuffer *circ);
+
+/******************************************************************************
+    [docexport CircBuffer_unlock]
+*//**
+    @brief Lock the circular buffer.
+******************************************************************************/
+void
+CircBuffer_unlock(CircBuffer *circ);
+
+/******************************************************************************
     [docexport CircBuffer_init]
 *//**
     @brief Initializer for CircBuffer.
@@ -80,13 +94,11 @@ CircBuffer_read(CircBuffer *circ, uint8_t *buf, uint32_t req_size);
     If pre-allocating, use CircBuffer_getMemAllocSize(desired_depth) to properly
     size the buffer for the desired depth.
     @param[in] buf_size  Size of the buffer (only applies if buf != NULL).
-    @param[in] max_items  Max number of items to track in the circular buffer.
 ******************************************************************************/
 int
 CircBuffer_init(
     CircBuffer *circ,
     uint32_t depth,
     uint8_t *buf,
-    uint32_t buf_size,
-    uint32_t max_items);
+    uint32_t buf_size);
 #endif

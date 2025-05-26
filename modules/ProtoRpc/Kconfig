@@ -1,7 +1,22 @@
 config PROTORPC
 	bool "Enable the ProtoRpc lib"
-	default n
 	depends on PBGENERIC
+
+config PROTORPC_TRACE_MODULE
+	bool "Enables Tracing of this module."
+
+config PROTORPC_TRACE_MODULE_ID
+	int "TraceModule ID for this module (see TraceModule.h)."
+	default -1
+	help
+	  Sets the ID for this trace module. Default of -1 will cause a compilation error.
+	  Must define a valid value.
+
+config PROTORPC_TRACE_MODULE_LEVEL
+	int "TraceModule level for the module (see TraceModule.h)."
+	default 3
+
+
 
 module = PROTORPC
 module-str = "ProtoRpc"

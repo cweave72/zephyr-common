@@ -30,7 +30,9 @@ void
 TraceRam_enable(void)
 {
     uint8_t cmd[] = "enable";
+    CircBuffer_lock(&traceram_circ);
     tracing_cmd_handle(cmd, sizeof(cmd));
+    CircBuffer_unlock(&traceram_circ);
     if (!is_tracing_enabled())
     {
         LOG_ERR("Tracing was not enabled.");
@@ -47,7 +49,9 @@ void
 TraceRam_disable(void)
 {
     uint8_t cmd[] = "disable";
+    CircBuffer_lock(&traceram_circ);
     tracing_cmd_handle(cmd, sizeof(cmd));
+    CircBuffer_unlock(&traceram_circ);
     if (is_tracing_enabled())
     {
         LOG_ERR("Tracing was not disabled.");

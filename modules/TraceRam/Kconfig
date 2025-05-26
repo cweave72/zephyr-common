@@ -1,7 +1,6 @@
 config TRACERAM
 	bool "Enable the TraceRam lib"
 	depends on CIRCBUFFER
-	depends on SWFIFO
 
 config TRACERAM_DEPTH
 	int "Depth of the TraceRam circular buffer."

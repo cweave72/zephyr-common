@@ -29,7 +29,7 @@ static void ram_init(void)
 
     printf("Initializing CircBuffer for TraceRam.\n");
     ret = CircBuffer_init(
-        &traceram_circ, CONFIG_TRACERAM_DEPTH, circbuf, sizeof(circbuf), 1000);
+        &traceram_circ, CONFIG_TRACERAM_DEPTH, circbuf, sizeof(circbuf));
     if (ret < 0)
     {
         LOG_ERR("CircBuffer_init returned: %d", ret);

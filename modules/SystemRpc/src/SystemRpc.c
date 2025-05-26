@@ -7,11 +7,11 @@
 #include "SystemRpc.h"
 #include "SystemRpc.pb.h"
 #include "pb.h"
-#include "TraceRam.h"
 
 LOG_MODULE_REGISTER(SystemRpc, CONFIG_SYSTEMRPC_LOG_LEVEL);
 
-#if defined(CONFIG_TRACING_BACKEND_RAM)
+#if defined(CONFIG_TRACERAM)
+#include "TraceRam.h"
 #define RAM_TRACEBUFFER_SIZE    CONFIG_RAM_TRACING_BUFFER_SIZE
 extern uint8_t ram_tracing[];
 #else
@@ -37,7 +37,7 @@ dumpmem(void *call_frame, void *reply_frame, StatusEnum *status)
     system_DumpMem_call *call = &call_msg->msg.dumpmem_call;
     system_DumpMem_reply *reply = &reply_msg->msg.dumpmem_reply;
     uint8_t *bytearray = reply->mem.bytes;
-    uint8_t *memory = (uint8_t *)call->address;
+    uint8_t *memory = (uint8_t *)(uintptr_t)call->address;
 
     (void)call;
     (void)reply;
@@ -47,10 +47,11 @@ dumpmem(void *call_frame, void *reply_frame, StatusEnum *status)
     reply_msg->which_msg = system_SystemCallset_dumpmem_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
-    LOG_DBG("reply->mem.size = %u", sizeof(reply->mem.bytes));
+    LOG_DBG("reply->mem.size = %u", (unsigned int)sizeof(reply->mem.bytes));
     if (call->size <= sizeof(reply->mem.bytes))
     {
-        LOG_DBG("Copying %u bytes from 0x%08x.", call->size, call->address);
+        LOG_DBG("Copying %u bytes from 0x%08x.", call->size,
+            (unsigned int)call->address);
         memcpy(bytearray, memory, call->size);
         reply->mem.size = call->size;
     }
@@ -88,8 +89,13 @@ gettraceramstatus(void *call_frame, void *reply_frame, StatusEnum *status)
     reply_msg->which_msg = system_SystemCallset_gettraceramstatus_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
+#if defined(CONFIG_TRACERAM)
     reply->state = TraceRam_getState();
     reply->count = TraceRam_getCount();
+#else
+    reply->state = 0;
+    reply->count = 0;
+#endif
 }
 
 /******************************************************************************
@@ -117,8 +123,12 @@ enabletraceram(void *call_frame, void *reply_frame, StatusEnum *status)
     reply_msg->which_msg = system_SystemCallset_enabletraceram_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
+#if defined(CONFIG_TRACERAM)
     TraceRam_enable();
     reply->state = TraceRam_getState();
+#else
+    reply->state = 0;
+#endif
 }
 
 /******************************************************************************
@@ -146,8 +156,17 @@ disabletraceram(void *call_frame, void *reply_frame, StatusEnum *status)
     reply_msg->which_msg = system_SystemCallset_disabletraceram_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
+#if defined(CONFIG_TRACERAM)
+    /* Sleep 50 ms to allow tracing thread to run and clear any pending writes
+        to TraceRam prior to disabling. Note:
+        CONFIG_TRACING_THREAD_WAIT_THRESHOLD should be less than 50 ms.
+    */
+    k_msleep(50);
     TraceRam_disable();
     reply->state = TraceRam_getState();
+#else
+    reply->state = 0;
+#endif
 }
 
 /******************************************************************************
@@ -168,7 +187,6 @@ getnexttraceram(void *call_frame, void *reply_frame, StatusEnum *status)
     system_SystemCallset *reply_msg = (system_SystemCallset *)reply_frame;
     system_GetNextTraceRam_call *call = &call_msg->msg.getnexttraceram_call;
     system_GetNextTraceRam_reply *reply = &reply_msg->msg.getnexttraceram_reply;
-    int num_read = 0;
 
     (void)call;
     (void)reply;
@@ -180,6 +198,7 @@ getnexttraceram(void *call_frame, void *reply_frame, StatusEnum *status)
 
     reply->empty_on_read = false;
 
+#if defined(CONFIG_TRACERAM)
     if (TraceRam_getCount() == 0)
     {
         LOG_DBG("TraceRam is empty.");
@@ -187,7 +206,7 @@ getnexttraceram(void *call_frame, void *reply_frame, StatusEnum *status)
         return;
     }
 
-    num_read = TraceRam_read(reply->data.bytes, call->max_size);
+    int num_read = TraceRam_read(reply->data.bytes, call->max_size);
     if (num_read <= 0)
     {
         LOG_ERR("TraceRam error: %d", num_read);
@@ -199,6 +218,10 @@ getnexttraceram(void *call_frame, void *reply_frame, StatusEnum *status)
     reply->data.size = num_read;
     reply->empty_on_read = (TraceRam_getCount() == 0) ? true : false;
     LOG_DBG("Total read: %u; empty_on_read: %u", num_read, reply->empty_on_read);
+#else
+    *status = StatusEnum_RPC_HANDLER_ERROR;
+    reply->data.size = 0;
+#endif
 }
 
 

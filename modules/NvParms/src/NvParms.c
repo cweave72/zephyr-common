@@ -50,7 +50,7 @@ settings_read_callback(
     params->read_size = 0;
 
     num_read_bytes = read_cb(cb_arg, buffer, num_read_bytes);
-    LOG_DBG("num_read_bytes = %d", num_read_bytes);
+    LOG_DBG("num_read_bytes = %d", (int)num_read_bytes);
 
     if (num_read_bytes < 0)
     {
@@ -110,7 +110,7 @@ NvParms_load(const char *name, uint8_t type, void *dest, size_t len)
     if (rc < 0 || params.read_size == 0)
     {
         LOG_ERR("Error retrieving %s: %d (read_size=%u)",
-            name, rc, params.read_size);
+            name, rc, (unsigned int)params.read_size);
         return -1;
     }
 

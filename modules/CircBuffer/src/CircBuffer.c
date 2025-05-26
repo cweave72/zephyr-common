@@ -124,7 +124,6 @@ void
 CircBuffer_flush(CircBuffer *circ)
 {
     lock(circ);
-    SwFifo_flush(&circ->hist_fifo);
     circ->wr_idx = 0;
     circ->rd_idx = 0;
     unlock(circ);
@@ -142,32 +141,17 @@ CircBuffer_flush(CircBuffer *circ)
 int
 CircBuffer_write(CircBuffer *circ, uint8_t *data, uint16_t size)
 {
-    SwFifo *fifo = &circ->hist_fifo;
     int ret = 0;
+    uint32_t avail_space = avail(circ);
 
     lock(circ);
 
-    LOG_DBG("Write %4u bytes: wr_idx: %4u; rd_idx: %4u; count: %4u; avail: %4u; items: %4u",
-            size, circ->wr_idx, circ->rd_idx, count(circ), avail(circ),
-            SwFifo_getCount(fifo));
+    //LOG_DBG("Write %4u bytes: wr_idx: %4u; rd_idx: %4u; count: %4u; avail: %4u",
+    //        size, circ->wr_idx, circ->rd_idx, count(circ), avail_space);
 
-    if (SwFifo_isFull(&circ->hist_fifo))
+    if (size > avail_space)
     {
-        LOG_ERR("CircBuffer history fifo is full: (%u)",
-            SwFifo_getCount(&circ->hist_fifo));
-        ret = -1;
-        goto exit;
-    }
-
-    /*  If the requested size is greater than the available space, we need
-        to pop old items from the buffer (effectivly throwing out old items)
-        until there is space to fit the new data. */
-    while (size > avail(circ))
-    {
-        uint16_t oldest_size;
-        SwFifo_read(fifo, &oldest_size, 1);
-        inc_rd_idx(circ, oldest_size);
-        LOG_DBG("Popped %u bytes (now avail: %u).", oldest_size, avail(circ));
+        inc_rd_idx(circ, size - avail_space);
     }
 
     /* Now copy the data to memory at the current wr_idx location */
@@ -176,10 +160,6 @@ CircBuffer_write(CircBuffer *circ, uint8_t *data, uint16_t size)
     /* Advance the write index, accounting for wrap. */
     inc_wr_idx(circ, size);
 
-    /* Push newest write size into the history fifo. */
-    SwFifo_write(fifo, &size, 1);
-    
-exit:
     unlock(circ);
     return ret;
 }
@@ -193,7 +173,11 @@ exit:
 uint32_t
 CircBuffer_getCount(CircBuffer *circ)
 {
-    return count(circ);
+    uint32_t count;
+    lock(circ);
+    count = count(circ);
+    unlock(circ);
+    return count;
 }
 
 
@@ -209,9 +193,8 @@ CircBuffer_getCount(CircBuffer *circ)
 int
 CircBuffer_read(CircBuffer *circ, uint8_t *buf, uint32_t req_size)
 {
-    SwFifo *fifo = &circ->hist_fifo;
-    uint32_t num_read = 0;
-    uint32_t num_avail = 0;
+    uint32_t num_avail;
+    uint32_t num_to_read = 0;
     uint32_t count;
     int ret = 0;
 
@@ -219,52 +202,49 @@ CircBuffer_read(CircBuffer *circ, uint8_t *buf, uint32_t req_size)
 
     num_avail = avail(circ);
     count = count(circ);
+    num_to_read = CIRC_MIN(req_size, count);
+    ret = num_to_read;
 
-    LOG_DBG("Read  %4u bytes: wr_idx: %4u; rd_idx: %4u; count: %4u; avail: %4u; items: %4u",
-            req_size, circ->wr_idx, circ->rd_idx, count(circ), avail(circ),
-            SwFifo_getCount(fifo));
+    LOG_DBG("Read  %4u bytes: wr_idx: %4u; rd_idx: %4u; count: %4u; avail: %4u; num_to_read: %4u",
+            req_size, circ->wr_idx, circ->rd_idx, count(circ), avail(circ), num_to_read);
 
     if (count == 0)
     {
-        LOG_WRN("Read of empty fifo");
+        LOG_WRN("Read of empty buffer");
         ret = 0;
         goto exit;
     }
 
-    while (1)
-    {
-        uint16_t block_size, num;
-        num = SwFifo_peek(fifo, &block_size, 1);
-        if (num == 0)
-        {
-            ret = num_read;
-            break;
-        }
+    LOG_DBG("Reading: %u bytes.", num_to_read);
 
-        /* Break if reading the next block puts us over the requested size. */
-        if (num_read + block_size > req_size)
-        {
-            if (num_read == 0)
-            {
-                LOG_WRN("Undersized request size (%u) for block size of %u",
-                    req_size, block_size);
-            }
-            ret = num_read;
-            break;
-        }
-
-        circ_read(circ, buf + num_read, block_size);
-        inc_rd_idx(circ, block_size);
-
-        SwFifo_ack(fifo, 1);
-        num_read += block_size;
-        LOG_DBG("Reading block: %u bytes (total=%u) %u.",
-            block_size, num_read, SwFifo_getCount(fifo));
-    }
+    circ_read(circ, buf, num_to_read);
+    inc_rd_idx(circ, num_to_read);
 
 exit:
     unlock(circ);
     return ret;
+}
+
+/******************************************************************************
+    [docimport CircBuffer_lock]
+*//**
+    @brief Lock the circular buffer.
+******************************************************************************/
+void
+CircBuffer_lock(CircBuffer *circ)
+{
+    lock(circ);
+}
+
+/******************************************************************************
+    [docimport CircBuffer_unlock]
+*//**
+    @brief Lock the circular buffer.
+******************************************************************************/
+void
+CircBuffer_unlock(CircBuffer *circ)
+{
+    unlock(circ);
 }
 
 /******************************************************************************
@@ -277,33 +257,14 @@ exit:
     If pre-allocating, use CircBuffer_getMemAllocSize(desired_depth) to properly
     size the buffer for the desired depth.
     @param[in] buf_size  Size of the buffer (only applies if buf != NULL).
-    @param[in] max_items  Max number of items to track in the circular buffer.
 ******************************************************************************/
 int
 CircBuffer_init(
     CircBuffer *circ,
     uint32_t depth,
     uint8_t *buf,
-    uint32_t buf_size,
-    uint32_t max_items)
+    uint32_t buf_size)
 {
-    int ret;
-
-    /* Initialize the history fifo. */
-    ret = SwFifo_init(
-        &circ->hist_fifo,
-        "hist_fifo",
-        max_items,
-        sizeof(uint16_t),
-        NULL,
-        0,
-        false);
-    if (ret < 0)
-    {
-        LOG_ERR("Error initializing history fifo: %d", ret);
-        return ret;
-    }
-
     k_mutex_init(&circ->mtx);
 
     if (!buf)

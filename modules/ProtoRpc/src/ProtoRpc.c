@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include "PbGeneric.h"
 #include "ProtoRpc.h"
+#include "ProtoRpc_trace.h"
 #include "ProtoRpcHeader.pb.h"
 
 LOG_MODULE_REGISTER(ProtoRpc, CONFIG_PROTORPC_LOG_LEVEL);
@@ -138,6 +139,8 @@ ProtoRpc_exec(
         return;
     }
 
+    protorpc_trace_header(header.seqn, header.which_callset, which_msg);
+
     /** @brief Call the handler. */
     LOG_DBG("Calling handler for which_msg=%u", which_msg);
     handler(callset_call_buf, callset_reply_buf, &reply_header.status);
@@ -153,7 +156,8 @@ ProtoRpc_exec(
     Pb_pack_delimited(&ostream, &reply_header, ProtoRpcHeader_fields);
     Pb_pack_delimited(&ostream, callset_reply_buf, callset_fields);
 
-    LOG_DBG("reply ostream bytes (after callset): %u", ostream.bytes_written);
+    LOG_DBG("reply ostream bytes (after callset): %u",
+        (unsigned int)ostream.bytes_written);
     //LOG_HEXDUMP_DBG(reply_buf, ostream.bytes_written, "Reply frame");
 
     *reply_encoded_size = ostream.bytes_written;

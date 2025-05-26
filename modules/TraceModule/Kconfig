@@ -1,0 +1,7 @@
+config TRACEMODULE
+	bool "Enable the TraceModule lib"
+	depends on TRACERAM
+
+module = TRACEMODULE
+module-str = "TraceModule"
+source "subsys/logging/Kconfig.template.log_config"
