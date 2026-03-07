@@ -1,0 +1,9 @@
+config RTOSUTILS
+	bool "Enable the SystemRpc lib."
+	depends on NANOPB
+	depends on PBGENERIC
+	depends on PROTORPC
+
+module = RTOSUTILS
+module-str = "RtosUtils"
+source "subsys/logging/Kconfig.template.log_config"

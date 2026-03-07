@@ -1,6 +1,12 @@
-set(srcs "src/RtosUtils.c")
-zephyr_include_directories(include)
-zephyr_library_sources(${srcs})
+if (CONFIG_RTOSUTILS)
+
+    set(srcs "src/RtosUtils.c"
+             "src/RtosUtilsRpc.c"
+        )
+    zephyr_include_directories(include)
+    zephyr_library_sources(${srcs})
+
+endif()
          
 #set(nanopb_path $ENV{ESP32_TOOLS}/nanopb)
 #set(proto_file "${CMAKE_CURRENT_SOURCE_DIR}/src/${name}.proto")

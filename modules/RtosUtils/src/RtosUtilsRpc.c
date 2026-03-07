@@ -4,106 +4,166 @@
  *  @brief: Handlers for RtosUtilsRpc.
 *******************************************************************************/
 #include <stdlib.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include "RtosUtilsRpc.h"
 #include "RtosUtils.h"
-#include "ProtoRpc.pb.h"
 #include "RtosUtilsRpc.pb.h"
-#include "LogPrint.h"
-#include "LogPrint_local.h"
 
-static const char *TAG = "RtosUtilsRpc";
+LOG_MODULE_DECLARE(RtosUtils, CONFIG_RTOSUTILS_LOG_LEVEL);
 
-#define MAX(a, b)   ((a) > (b)) ? (a) : (b)
+struct ctx_object {
+    uint8_t loop_idx;
+    uint8_t start_thread_idx;
+    uint8_t curr_thread_idx;
+    uint8_t max_reportable;
+    uint8_t name_max;
+    uint8_t thread_cnt;
+    int ret;
+    rtosutils_GetSystemThreads_reply *reply;
+};
 
 /******************************************************************************
-    getSystemTasks
+    [docimport thread_info_cb]
+*//**
+    @brief Description.
+******************************************************************************/
+static void
+thread_info_cb(const struct k_thread *cthread, void *data)
+{
+    struct ctx_object *ctx = (struct ctx_object *)data;
+    struct k_thread *thread = (struct k_thread *)cthread;
+    const char *tname;
+    k_thread_runtime_stats_t rt_stats_thread;
+    size_t unused;
+
+    ctx->thread_cnt++;
+
+    /* If we've hit our reportable limit, signal with ret = -1 and return. */
+    if (ctx->loop_idx == ctx->max_reportable)
+    {
+        ctx->ret = -1;
+        return;
+    }
+
+    if (ctx->curr_thread_idx >= ctx->start_thread_idx)
+    {
+        rtosutils_ThreadInfo *tinfo = &ctx->reply->thread_info[ctx->loop_idx];
+        char *name = ctx->reply->thread_info[ctx->loop_idx].name;
+
+        tname = k_thread_name_get(thread);
+        strncpy(name, tname, ctx->name_max-1);
+        tinfo->name[ctx->name_max-1] = '\0';
+
+        tinfo->tid = (uint32_t)thread;
+        tinfo->state = thread->base.thread_state;
+        tinfo->prio = thread->base.prio;
+
+#ifdef CONFIG_THREAD_RUNTIME_STATS
+	if (k_thread_runtime_stats_get(thread, &rt_stats_thread) < 0)
+        {
+	    tinfo->current_cycles = 0;
+	    tinfo->peak_cycles = 0;
+	    tinfo->avg_cycles = 0;
+	    tinfo->total_cycles = 0;
+	}
+#ifdef CONFIG_SCHED_THREAD_USAGE_ANALYSIS
+        else
+        {
+	    tinfo->current_cycles = rt_stats_thread.current_cycles;
+	    tinfo->peak_cycles = rt_stats_thread.peak_cycles;
+	    tinfo->avg_cycles = rt_stats_thread.average_cycles;
+	    tinfo->total_cycles = rt_stats_thread.execution_cycles;
+        }
+#else
+        else
+        {
+	    tinfo->current_cycles = 0;
+	    tinfo->peak_cycles = 0;
+	    tinfo->avg_cycles = 0;
+	    tinfo->total_cycles = rt_stats_thread.execution_cycles;
+        }
+#endif
+#else
+        tinfo->current_cycles = 0;
+        tinfo->peak_cycles = 0;
+        tinfo->avg_cycles = 0;
+        tinfo->total_cycles = 0;
+#endif
+        tinfo->stack_size = thread->stack_info.size;
+        if (k_thread_stack_space_get(thread, &unused) < 0)
+        {
+            tinfo->unused_stack = 0;
+        }
+        else
+        {
+            tinfo->unused_stack = unused;
+        }
+    }
+
+    /* Iterate the current thread index. */
+    ctx->curr_thread_idx++;
+
+    /* Iteration the loop index. */
+    ctx->loop_idx++;
+
+    ctx->ret = 0;
+}
+
+/******************************************************************************
+    getSystemThreads
 
     Call params:
     Reply params:
         reply->run_time: uint64 
-        reply->task_info: message [repeated]
+        reply->thread_info: message [repeated]
 *//**
     @brief Implements the RPC getSystemTasks handler.
 ******************************************************************************/
 static void
-getSystemTasks(void *call_frame, void *reply_frame, StatusEnum *status)
+getSystemThreads(void *call_frame, void *reply_frame, StatusEnum *status)
 {
-    rtos_RtosUtilsCallset *call_msg = (rtos_RtosUtilsCallset *)call_frame;
-    rtos_RtosUtilsCallset *reply_msg = (rtos_RtosUtilsCallset *)reply_frame;
-    rtos_GetSystemTasks_call *call = &call_msg->msg.getSystemTasks_call;
-    rtos_GetSystemTasks_reply *reply = &reply_msg->msg.getSystemTasks_reply;
-    UBaseType_t numTasks;
-    TaskStatus_t *tasks;
-    int max_tasks = PROTORPC_ARRAY_LENGTH(reply->task_info);
-    int name_max = PROTORPC_ARRAY_LENGTH(reply->task_info[0].name);
-    int i;
-    unsigned long runtime;
+    rtosutils_Callset *call_msg = (rtosutils_Callset *)call_frame;
+    rtosutils_Callset *reply_msg = (rtosutils_Callset *)reply_frame;
+    rtosutils_GetSystemThreads_call *call = &call_msg->msg.getSystemThreads_call;
+    rtosutils_GetSystemThreads_reply *reply = &reply_msg->msg.getSystemThreads_reply;
+    int max_threads_reportable = PROTORPC_ARRAY_LENGTH(reply->thread_info);
+    int name_max = PROTORPC_ARRAY_LENGTH(reply->thread_info[0].name);
+    struct ctx_object ctx;
+    k_thread_runtime_stats_t rt_stats_all;
 
-    (void)call;
+    LOG_DBG("In getSystemTasks handler");
 
-    LOGPRINT_DEBUG("In getSystemTasks handler");
-
-    reply_msg->which_msg = rtos_RtosUtilsCallset_getSystemTasks_reply_tag;
+    reply_msg->which_msg = rtosutils_Callset_getSystemThreads_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
-    numTasks = MAX(uxTaskGetNumberOfTasks(), max_tasks);
+    ctx.loop_idx = 0;
+    ctx.thread_cnt = 0;
+    ctx.curr_thread_idx = call->idx_start;
+    ctx.start_thread_idx = call->idx_start;
+    ctx.max_reportable = max_threads_reportable;
+    ctx.name_max = name_max;
+    ctx.reply = reply;
 
-    LOGPRINT_DEBUG("Allocating for %u tasks (%u max).", numTasks, max_tasks);
-    tasks = (TaskStatus_t *)malloc(numTasks*sizeof(TaskStatus_t));
-    if (!tasks)
+    k_thread_foreach_unlocked(thread_info_cb, (void *)&ctx);
+    reply->thread_info_count = ctx.loop_idx;
+    LOG_DBG("loop_idx=%u", ctx.loop_idx);
+
+    if (k_thread_runtime_stats_all_get(&rt_stats_all) < 0) {
+        reply->total_cycles = 0;
+    }
+    else
     {
-        LOGPRINT_ERROR("Error allocating memory.");
-        reply->task_info_count = 0;
-        *status = StatusEnum_RPC_HANDLER_ERROR;
-        return;
+        reply->total_cycles = rt_stats_all.execution_cycles;
     }
 
-    numTasks = uxTaskGetSystemState(tasks, numTasks, &runtime);
-    if (numTasks == 0)
-    {
-        LOGPRINT_ERROR("No tasks written.");
-        reply->task_info_count = 0;
-        *status = StatusEnum_RPC_HANDLER_ERROR;
-        goto ret;
-    }
-
-    for (i = 0; i < numTasks; i++)
-    {
-        rtos_TaskInfo *info = &reply->task_info[i];
-        TaskStatus_t *task = &tasks[i];
-
-        LOGPRINT_DEBUG("task %u: %u %s", i, task->xTaskNumber, task->pcTaskName);
-        strncpy(info->name, task->pcTaskName, name_max);
-        info->number          = task->xTaskNumber;
-        info->state           = task->eCurrentState;
-        info->prio            = task->uxCurrentPriority;
-        info->rtc             = task->ulRunTimeCounter;
-        info->stack_remaining = task->usStackHighWaterMark;
-
-        UBaseType_t coreId = xTaskGetCoreID(task->xHandle);
-        if (coreId == tskNO_AFFINITY)
-        {
-            /* Task was not pinned to a core when created. */
-            info->core_num = -1; 
-        }
-        else
-        {
-            info->core_num = coreId; 
-        }
-    }
-
-    reply->task_info_count = numTasks;
-    reply->run_time = runtime;
-
-ret:
-    free(tasks);
-
+    reply->idx_start = call->idx_start;
+    reply->num_threads = ctx.thread_cnt;
 }
 
 
-
 static ProtoRpc_Handler_Entry handlers[] = {
-    PROTORPC_ADD_HANDLER(rtos_RtosUtilsCallset_getSystemTasks_call_tag, getSystemTasks),
+    PROTORPC_ADD_HANDLER(rtosutils_Callset_getSystemThreads_call_tag, getSystemThreads),
 };
 
 #define NUM_HANDLERS    PROTORPC_ARRAY_LENGTH(handlers)
@@ -113,14 +173,15 @@ static ProtoRpc_Handler_Entry handlers[] = {
 *//**
     @brief Resolver function for RtosUtilsRpc.
     @param[in] call_frame  Pointer to the unpacked call frame object.
-    @param[in] offset  Offset of the callset member within the call_frame.
+    @param[out] which_msg  Output which_msg was requested.
 ******************************************************************************/
 ProtoRpc_handler *
-RtosUtilsRpc_resolver(void *call_frame, uint32_t offset)
+RtosUtilsRpc_resolver(void *call_frame, uint32_t *which_msg)
 {
-    uint8_t *frame = (uint8_t *)call_frame;
-    rtos_RtosUtilsCallset *this = (rtos_RtosUtilsCallset *)&frame[offset];
+    rtosutils_Callset *this = (rtosutils_Callset *)call_frame;
     unsigned int i;
+
+    *which_msg = this->which_msg;
 
     /** @brief Handler lookup */
     for (i = 0; i < NUM_HANDLERS; i++)
