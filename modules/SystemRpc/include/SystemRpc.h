@@ -8,6 +8,10 @@
 
 #include <stdint.h>
 #include "ProtoRpc.h"
+#include "ProtoRpcHeader.pb.h"
+#include "SystemRpc.pb.h"
+
+extern CallsetInfo system_Callset_info;
 
 /******************************************************************************
     [docexport SystemRpc_resolver]

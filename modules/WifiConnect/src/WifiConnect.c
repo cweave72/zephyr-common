@@ -19,8 +19,25 @@ LOG_MODULE_REGISTER(WifiConnect, CONFIG_WIFICONNECT_LOG_LEVEL);
 #define FLAG_CONNECTED      ((uint32_t)0x1 << 0)
 #define FLAG_DISCONNECTED   ((uint32_t)0x1 << 1)
 #define FLAG_IP_OBTAINED    ((uint32_t)0x1 << 2)
+#define FLAG_DO_CONNECT     ((uint32_t)0x1 << 3)
+
+static K_SEM_DEFINE(connect_sem, 0, 1);
+static K_SEM_DEFINE(monitor_started, 0, 1);
 
 static RTOS_FLAGS_CREATE(wifi_flags);
+
+#define MONITOR_STACK_SIZE (2*1024)
+static RTOS_TASK mon_thread;
+static RTOS_TASK_STACK mon_thread_stack;
+static void monitor_thread(void *arg0, void *arg1, void *arg2);
+
+struct monitor_thread_args
+{
+    const char *ssid;
+    const char *pass;
+};
+
+static struct monitor_thread_args monitor_args;
 
 static struct net_mgmt_event_callback wifi_cb;
 static struct net_mgmt_event_callback ipv4_cb;
@@ -34,7 +51,30 @@ handle_connect_result(struct net_mgmt_event_callback *cb)
 
     if (status->status)
     {
-        LOG_ERR("Connection request failed (%d)\n", status->status);
+        char *reason;
+
+        switch (status->conn_status)
+        {
+        case WIFI_STATUS_CONN_FAIL:
+            reason = "likely incorrect key";
+            break;
+        case WIFI_STATUS_CONN_WRONG_PASSWORD:
+            reason = "wrong password";
+            break;
+        case WIFI_STATUS_CONN_TIMEOUT:
+            reason = "timed out";
+            break;
+        case WIFI_STATUS_CONN_AP_NOT_FOUND:
+            reason = "AP not found";
+            break;
+        case WIFI_STATUS_CONN_LAST_STATUS:
+            reason = "last status";
+            break;
+        default:
+            reason = "unknown";
+        }
+
+        LOG_ERR("Connection request failed: reason=%s", reason);
     }
     else
     {
@@ -49,13 +89,33 @@ handle_disconnect_result(struct net_mgmt_event_callback *cb)
 
     if (status->status)
     {
-        LOG_ERR("Error on disconnect (%d)", status->status);
+        char *reason;
+        switch (status->disconn_reason)
+        {
+        case WIFI_REASON_DISCONN_UNSPECIFIED:
+            reason = "unspecified";
+            break;
+        case WIFI_REASON_DISCONN_USER_REQUEST:
+            reason = "user request";
+            break;
+        case WIFI_REASON_DISCONN_AP_LEAVING:
+            reason = "AP leaving";
+            break;
+        case WIFI_REASON_DISCONN_INACTIVITY:
+            reason = "inactivity";
+            break;
+        default:
+            reason = "unknown";
+        }
+
+        LOG_ERR("Wifi disconnect: reason=%s (%d)", reason, status->disconn_reason);
     }
     else
     {
-        LOG_INF("Disconnected");
-        RTOS_FLAGS_SET(&wifi_flags, FLAG_DISCONNECTED);
+        LOG_INF("Wifi disconnect success");
     }
+
+    RTOS_FLAGS_SET(&wifi_flags, FLAG_DISCONNECTED);
 }
 
 static void
@@ -131,13 +191,10 @@ connect(const char *ssid, const char *pass)
 
     LOG_INF("Connecting to SSID: %s", wifi_params.ssid);
 
-    if (net_mgmt(NET_REQUEST_WIFI_CONNECT,
-                 iface,
-                 &wifi_params,
-                 sizeof(struct wifi_connect_req_params)))
-    {
-        LOG_ERR("WiFi Connection Request Failed");
-    }
+    net_mgmt(NET_REQUEST_WIFI_CONNECT,
+             iface,
+             &wifi_params,
+             sizeof(struct wifi_connect_req_params));
 }
 
 static void
@@ -207,33 +264,19 @@ WifiConnect_getState(void)
 int
 WifiConnect_connect(const char *ssid, const char *pass)
 {
-    uint32_t flags;
-
     if (!initialized)
     {
-        WifiConnect_init();
+        WifiConnect_init(ssid, pass);
     }
-    
-    LOG_DBG("Staring Wifi connection process.");
-    RTOS_TASK_SLEEP_ms(3000);
 
-    connect(ssid, pass);
-    LOG_DBG("Waiting for connection...");
+    RTOS_FLAGS_SET(&wifi_flags, FLAG_DO_CONNECT);
 
-    flags = RTOS_PEND_ALL_FLAGS_MS(
-        &wifi_flags,
-        FLAG_CONNECTED | FLAG_IP_OBTAINED,
-        10000);
-    if (flags == 0)
+    if (k_sem_take(&connect_sem, K_MSEC(30000)) != 0)
     {
-        LOG_ERR("Timeout on connection request.");
+        LOG_ERR("Timeout waiting for wifi connection.");
         return -1;
     }
-    RTOS_FLAGS_CLR(&wifi_flags, FLAG_CONNECTED | FLAG_IP_OBTAINED);
-
-    status();
-    LOG_INF("Wifi successfully connected.");
-
+    
     return 0;
 }
 
@@ -241,9 +284,11 @@ WifiConnect_connect(const char *ssid, const char *pass)
     [docimport WifiConnect_init]
 *//**
     @brief Initializes a wifi connection.
+    @param[in] ssid  SSID of network.
+    @param[in] pass  Password.
 ******************************************************************************/
-void
-WifiConnect_init(void)
+int
+WifiConnect_init(const char *ssid, const char *pass)
 {
     net_mgmt_init_event_callback(
         &wifi_cb,
@@ -258,5 +303,110 @@ WifiConnect_init(void)
     net_mgmt_add_event_callback(&wifi_cb);
     net_mgmt_add_event_callback(&ipv4_cb);
 
+    monitor_args.ssid = ssid;
+    monitor_args.pass = pass;
+
+    int ret = RTOS_TASK_CREATE_DYNAMIC(
+        &mon_thread,
+        monitor_thread,
+        "wifi_monitor",
+        &mon_thread_stack,
+        MONITOR_STACK_SIZE,
+        (void *)&monitor_args,
+        10);
+    if (ret != 0)
+    {
+        LOG_ERR("Failed creating monitor thread (%d)", ret);
+        return ret;
+    }
+
+    k_sem_take(&monitor_started, K_FOREVER);
     initialized = true;
+
+    LOG_INF("WifiConnect_init complete.");
+
+    return 0;
+}
+
+/******************************************************************************
+    monitor_thread
+*//**
+    @brief Wifi monitor thread.
+******************************************************************************/
+static void
+monitor_thread(void *arg0, void *arg1, void *arg2)
+{
+    struct monitor_thread_args *args = (struct monitor_thread_args *)arg0;
+    const char *ssid = args->ssid;
+    const char *pass = args->pass;
+    bool give_sem_on_connect = false;
+    struct net_if *iface = net_if_get_default();
+
+    (void)arg1;
+    (void)arg2;
+
+    LOG_INF("Wifi monitor thread started. %s, %s", ssid, pass);
+    k_sem_give(&monitor_started);
+
+    while (1)
+    {
+        uint32_t flags;
+
+        flags = RTOS_PEND_ANY_FLAGS_MS(
+            &wifi_flags,
+            FLAG_DO_CONNECT | FLAG_CONNECTED | FLAG_IP_OBTAINED | FLAG_DISCONNECTED,
+            10000);
+
+        if (flags == 0)
+        {
+            /* Maintenance timeout. */
+            LOG_DBG("Wifi monitor heartbeat.");
+            continue;
+        }
+
+        if (flags & FLAG_DO_CONNECT)
+        {
+            LOG_INF("Wifi connect initiated.");
+            RTOS_FLAGS_CLR(&wifi_flags, FLAG_DO_CONNECT);
+            give_sem_on_connect = true;
+            connect(ssid, pass);
+        }
+
+        if (flags & FLAG_CONNECTED)
+        {
+            LOG_INF("Wifi connected.");
+            status();
+            RTOS_FLAGS_CLR(&wifi_flags, FLAG_CONNECTED);
+            if (give_sem_on_connect)
+            {
+                k_sem_give(&connect_sem);
+                give_sem_on_connect = false;
+            }
+        }
+
+        if (flags & FLAG_IP_OBTAINED)
+        {
+            LOG_INF("Wifi IP obtained.");
+            RTOS_FLAGS_CLR(&wifi_flags, FLAG_IP_OBTAINED);
+        }
+
+        if (flags & FLAG_DISCONNECTED)
+        {
+            RTOS_FLAGS_CLR(&wifi_flags, FLAG_DISCONNECTED);
+
+            /* Sleep before attempting to reconnect. */
+            RTOS_TASK_SLEEP_ms(3000);
+
+            net_if_down(iface);
+            LOG_INF("Interface down.");
+            RTOS_TASK_SLEEP_ms(500);
+
+            net_if_up(iface);
+            RTOS_TASK_SLEEP_ms(500);
+            LOG_INF("Interface up.");
+
+            LOG_INF("Attempting to reconnect...");
+            connect(ssid, pass);
+        }
+    }
 }

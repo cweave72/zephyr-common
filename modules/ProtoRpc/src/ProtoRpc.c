@@ -8,7 +8,6 @@
 #include "PbGeneric.h"
 #include "ProtoRpc.h"
 #include "ProtoRpc_trace.h"
-#include "ProtoRpcHeader.pb.h"
 
 LOG_MODULE_REGISTER(ProtoRpc, CONFIG_PROTORPC_LOG_LEVEL);
 
@@ -39,6 +38,32 @@ callset_lookup(
 
     return NULL;
 }
+
+static uint32_t
+gather_callset_info(
+    ProtoRpc *rpc,
+    CallsetInfo *callset_info,
+    uint32_t max_info)
+{
+    uint32_t i;
+
+    for (i = 0; i < rpc->num_callsets; i++)
+    {
+        if (i == max_info)
+        {
+            LOG_WRN("Too many callsets to fit in reply header; max_info=%u",
+                (unsigned int)max_info);
+            break;
+        }
+
+        ProtoRpc_Callset_Entry *entry = &rpc->callsets[i];
+        memcpy(&callset_info[i], entry->info, sizeof(CallsetInfo));
+        callset_info[i].id = entry->id;
+    }
+
+    return i;
+}
+
 
 /******************************************************************************
     [docimport ProtoRpc_exec]
@@ -86,10 +111,35 @@ ProtoRpc_exec(
         return;
     }
 
-    LOG_DBG("header: seqn = %u; no_reply = %u; which_callset = %u",
+    LOG_DBG("header: seqn = %u; no_reply = %u; query = %u; which_callset = %u",
         (unsigned int)header.seqn,
         (unsigned int)header.no_reply,
+        (unsigned int)header.callset_query,
         (unsigned int)header.which_callset);
+
+    if (header.callset_query)
+    {
+        uint32_t max_info = PROTORPC_ARRAY_LENGTH(reply_header.callset_info);
+        uint32_t count;
+
+        LOG_DBG("Processing callset query for %u callsets (max=%u).",
+            rpc->num_callsets, (unsigned int)max_info);
+
+        reply_header.has_num_callsets = true;
+
+        count = gather_callset_info(rpc, reply_header.callset_info, max_info);
+
+        reply_header.num_callsets = rpc->num_callsets;
+        reply_header.callset_info_count = count;
+
+        reply_header.seqn = header.seqn;
+        reply_header.which_callset = header.which_callset;
+        reply_header.status = StatusEnum_RPC_SUCCESS;
+        *reply_encoded_size = Pb_pack_delimited(&ostream,
+                                                &reply_header,
+                                                ProtoRpcHeader_fields);
+        return;
+    }
 
     /** @brief Get the callset resolver function. */
     resolver = callset_lookup(header.which_callset,

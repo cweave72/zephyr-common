@@ -53,6 +53,16 @@ tcp_server_task(void *p, void *arg1, void *arg2)
                                 KEEPALIVE_COUNT);
         if (sock < 0)
         {
+            int err = errno;
+
+            if (err == ECONNABORTED ||
+                err == EAGAIN ||
+                err == EWOULDBLOCK ||
+                err == EINTR) {
+                /* Non-fatal error. Continue accepting new connections. */
+                LOG_WRN("Errno %d, continuing.", err);
+                continue;
+            }
             LOG_ERR("Exiting task %s due to socket accept error.",
                 task->name);
             break;

@@ -40,6 +40,7 @@ function(nanopb_build_sources target base_path)
     #message(STATUS "[nanopb] Setting include paths: ${header_include_paths}")
 
     zephyr_include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
     zephyr_nanopb_sources(${libname} ${protofiles})
 
 endfunction()

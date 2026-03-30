@@ -8,6 +8,10 @@
 
 #include <stdint.h>
 #include "ProtoRpc.h"
+#include "ProtoRpcHeader.pb.h"
+#include "RtosUtilsRpc.pb.h"
+
+extern CallsetInfo rtosutils_Callset_info;
 
 /******************************************************************************
     [docexport RtosUtilsRpc_resolver]

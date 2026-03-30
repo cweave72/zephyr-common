@@ -30,7 +30,9 @@ WifiConnect_connect(const char *ssid, const char *pass);
     [docexport WifiConnect_init]
 *//**
     @brief Initializes a wifi connection.
+    @param[in] ssid  SSID of network.
+    @param[in] pass  Password.
 ******************************************************************************/
-void
-WifiConnect_init(void);
+int
+WifiConnect_init(const char *ssid, const char *pass);
 #endif

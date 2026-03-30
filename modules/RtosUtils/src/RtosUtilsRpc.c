@@ -8,9 +8,15 @@
 #include <zephyr/logging/log.h>
 #include "RtosUtilsRpc.h"
 #include "RtosUtils.h"
-#include "RtosUtilsRpc.pb.h"
 
 LOG_MODULE_DECLARE(RtosUtils, CONFIG_RTOSUTILS_LOG_LEVEL);
+
+CallsetInfo rtosutils_Callset_info = {
+    .ver_major = rtosutils_CallsetVersion_MAJOR,
+    .ver_minor = rtosutils_CallsetVersion_MINOR,
+    .ver_patch = rtosutils_CallsetVersion_PATCH,
+    .name = "rtosutils",
+};
 
 struct ctx_object {
     uint8_t loop_idx;

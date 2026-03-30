@@ -4,6 +4,11 @@ config TCPRPCSERVER
 	depends on TCPSERVER
 	depends on PROTORPC
 
+config TCPRPCSERVER_PORT
+	int "TCP port for the TcpRpcServer"
+	default 13001
+	depends on TCPRPCSERVER
+
 module = TCPRPCSERVER
 module-str = "TcpRpcServer"
 source "subsys/logging/Kconfig.template.log_config"

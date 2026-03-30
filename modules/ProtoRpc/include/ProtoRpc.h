@@ -25,16 +25,19 @@ typedef struct ProtoRpc_Callset_Entry
     const void *fields;
     /** @brief Callset size */
     uint32_t size;
+    /** @brief Callset information. */
+    CallsetInfo *info;
 
 } ProtoRpc_Callset_Entry;
 
 typedef ProtoRpc_Callset_Entry * ProtoRpc_callsets;
 
-#define PROTORPC_ADD_CALLSET(callset_id, callset_resolver, callset_fields, callset_size) \
-{ .id       = (callset_id),                  \
-  .resolver = (callset_resolver),            \
-  .fields   = (callset_fields),              \
-  .size     = (callset_size)                 \
+#define PROTORPC_ADD_CALLSET(_id, _resolver, prefix) \
+{ .id       = (_id),            \
+  .resolver = (_resolver),       \
+  .fields   = prefix##_fields,  \
+  .size     = prefix##_size,    \
+  .info     = &prefix##_info    \
 }
 
 typedef struct ProtoRpc
