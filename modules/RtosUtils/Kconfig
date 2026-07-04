@@ -1,5 +1,8 @@
 config RTOSUTILS
-	bool "Enable the SystemRpc lib."
+	bool "Enable the RtosUtils lib."
+
+config RTOSUTILS_RPC
+	bool "Enable the RtosUtils rpc lib."
 	depends on NANOPB
 	depends on PBGENERIC
 	depends on PROTORPC

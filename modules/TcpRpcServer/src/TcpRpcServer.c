@@ -13,7 +13,7 @@
 /** @brief Initialize the logging module. */
 LOG_MODULE_REGISTER(TcpRpcServer, CONFIG_TCPRPCSERVER_LOG_LEVEL);
 
-#define TCP_BUFFER_SIZE     4*1024
+#define TCP_BUFFER_SIZE     2*1024
 
 /** @brief Static buffers used for data. */
 /* Buffer used to hold received socket data */
@@ -62,7 +62,7 @@ rpc_callback(void *server, int sock, uint8_t *data, uint16_t len, int *finished)
 
         if (raw_msg_size)
         {
-            LOG_HEXDUMP_DBG(rpc_rcv_msg, raw_msg_size, "Deframed raw message.");
+            //LOG_HEXDUMP_DBG(rpc_rcv_msg, raw_msg_size, "Deframed raw message.");
 
             ProtoRpc_exec(
                 rpc,

@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(WifiConnect, CONFIG_WIFICONNECT_LOG_LEVEL);
 #define FLAG_DISCONNECTED   ((uint32_t)0x1 << 1)
 #define FLAG_IP_OBTAINED    ((uint32_t)0x1 << 2)
 #define FLAG_DO_CONNECT     ((uint32_t)0x1 << 3)
+#define FLAG_RETRY_CONNECT  ((uint32_t)0x1 << 4)
 
 static K_SEM_DEFINE(connect_sem, 0, 1);
 static K_SEM_DEFINE(monitor_started, 0, 1);
@@ -43,13 +44,34 @@ static struct net_mgmt_event_callback wifi_cb;
 static struct net_mgmt_event_callback ipv4_cb;
 
 static bool initialized = false;
+static uint8_t retry_attempts = 0;
+
+static WifiConnect_error_cb *unrecoverable_error_cb = NULL;
+
+/* Buffer to store current ip address. */
+static char ipv4_addr[NET_IPV4_ADDR_LEN];
+static char ipv4_netmask[NET_IPV4_ADDR_LEN];
+static char ipv4_gw[NET_IPV4_ADDR_LEN];
+static bool have_ip = false;
 
 static void 
 handle_connect_result(struct net_mgmt_event_callback *cb)
 {
     struct wifi_status *status = (struct wifi_status *)cb->info;
 
-    if (status->status)
+
+    if (status->status < 0)
+    {
+        LOG_ERR("General error during connection (%d)", status->status);
+        retry_attempts++;
+        RTOS_FLAGS_SET(&wifi_flags, FLAG_RETRY_CONNECT);
+    }
+    else if (status->status == WIFI_STATUS_CONN_SUCCESS)
+    {
+        LOG_INF("Connection request success");
+        RTOS_FLAGS_SET(&wifi_flags, FLAG_CONNECTED);
+    }
+    else
     {
         char *reason;
 
@@ -74,11 +96,8 @@ handle_connect_result(struct net_mgmt_event_callback *cb)
             reason = "unknown";
         }
 
-        LOG_ERR("Connection request failed: reason=%s", reason);
-    }
-    else
-    {
-        RTOS_FLAGS_SET(&wifi_flags, FLAG_CONNECTED);
+        LOG_ERR("Connection request failed: reason=%s (conn_status=%d)",
+            reason, status->conn_status);
     }
 }
 
@@ -87,7 +106,15 @@ handle_disconnect_result(struct net_mgmt_event_callback *cb)
 {
     struct wifi_status *status = (struct wifi_status *)cb->info;
 
-    if (status->status)
+    if (status->status < 0)
+    {
+        LOG_ERR("General error during disconnect (%d)", status->status);
+    }
+    else if (status->status == WIFI_REASON_DISCONN_SUCCESS)
+    {
+        LOG_INF("Wifi disconnect success");
+    }
+    else
     {
         char *reason;
         switch (status->disconn_reason)
@@ -108,11 +135,7 @@ handle_disconnect_result(struct net_mgmt_event_callback *cb)
             reason = "unknown";
         }
 
-        LOG_ERR("Wifi disconnect: reason=%s (%d)", reason, status->disconn_reason);
-    }
-    else
-    {
-        LOG_INF("Wifi disconnect success");
+        LOG_ERR("Wifi disconnected: reason=%s (%d)", reason, status->disconn_reason);
     }
 
     RTOS_FLAGS_SET(&wifi_flags, FLAG_DISCONNECTED);
@@ -225,6 +248,7 @@ static void disconnect(void)
 {
     struct net_if *iface = net_if_get_default();
 
+    LOG_INF("User disconnect.");
     if (net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0))
     {
         LOG_ERR("WiFi Disconnection Request Failed");
@@ -260,13 +284,14 @@ WifiConnect_getState(void)
     @brief Performs a connection request.
     @param[in] ssid  SSID of network.
     @param[in] pass  Password.
+    @param[in] cb  Callback on unrecoverable error (set to NULL if not used).
 ******************************************************************************/
 int
-WifiConnect_connect(const char *ssid, const char *pass)
+WifiConnect_connect(const char *ssid, const char *pass, WifiConnect_error_cb *cb)
 {
     if (!initialized)
     {
-        WifiConnect_init(ssid, pass);
+        WifiConnect_init(ssid, pass, cb);
     }
 
     RTOS_FLAGS_SET(&wifi_flags, FLAG_DO_CONNECT);
@@ -281,15 +306,41 @@ WifiConnect_connect(const char *ssid, const char *pass)
 }
 
 /******************************************************************************
+    [docimport WifiConnect_getIpInfo]
+*//**
+    @brief Gets current IP address, Netmask and Gateway strings.
+    @param[out] ip  Pointer to IP address string.
+    @param[out] netmask  Pointer to netmask string.
+    @param[out] gw  Pointer to gateway address string.
+    @return Returns the IP status.
+******************************************************************************/
+bool
+WifiConnect_getIpInfo(char **ip, char **netmask, char **gw)
+{
+    *ip = ipv4_addr;
+    *netmask = ipv4_netmask;
+    *gw = ipv4_gw;
+    return have_ip;
+}
+
+/******************************************************************************
     [docimport WifiConnect_init]
 *//**
     @brief Initializes a wifi connection.
     @param[in] ssid  SSID of network.
     @param[in] pass  Password.
+    @param[in] cb  Callback on unrecoverable error (set to NULL if not used).
 ******************************************************************************/
 int
-WifiConnect_init(const char *ssid, const char *pass)
+WifiConnect_init(const char *ssid, const char *pass, WifiConnect_error_cb *cb)
 {
+    unrecoverable_error_cb = cb;
+
+    ipv4_addr[0] = '\0';
+    ipv4_netmask[0] = '\0';
+    ipv4_gw[0] = '\0';
+    have_ip = false;
+
     net_mgmt_init_event_callback(
         &wifi_cb,
         event_handler,
@@ -345,7 +396,7 @@ monitor_thread(void *arg0, void *arg1, void *arg2)
     (void)arg1;
     (void)arg2;
 
-    LOG_INF("Wifi monitor thread started. %s, %s", ssid, pass);
+    LOG_INF("Wifi monitor thread started.");
     k_sem_give(&monitor_started);
 
     while (1)
@@ -354,7 +405,11 @@ monitor_thread(void *arg0, void *arg1, void *arg2)
 
         flags = RTOS_PEND_ANY_FLAGS_MS(
             &wifi_flags,
-            FLAG_DO_CONNECT | FLAG_CONNECTED | FLAG_IP_OBTAINED | FLAG_DISCONNECTED,
+            FLAG_DO_CONNECT |
+            FLAG_CONNECTED |
+            FLAG_IP_OBTAINED |
+            FLAG_DISCONNECTED |
+            FLAG_RETRY_CONNECT,
             10000);
 
         if (flags == 0)
@@ -374,6 +429,7 @@ monitor_thread(void *arg0, void *arg1, void *arg2)
 
         if (flags & FLAG_CONNECTED)
         {
+            retry_attempts = 0;
             LOG_INF("Wifi connected.");
             status();
             RTOS_FLAGS_CLR(&wifi_flags, FLAG_CONNECTED);
@@ -386,26 +442,62 @@ monitor_thread(void *arg0, void *arg1, void *arg2)
 
         if (flags & FLAG_IP_OBTAINED)
         {
-            LOG_INF("Wifi IP obtained.");
+            have_ip = true;
+            LOG_INF("IP obtained.");
             RTOS_FLAGS_CLR(&wifi_flags, FLAG_IP_OBTAINED);
+
+            /* Load IP parameters. */
+            net_addr_ntop(AF_INET,
+                &iface->config.ip.ipv4->unicast[0].ipv4.address.in_addr,
+                ipv4_addr,
+                sizeof(ipv4_addr));
+            net_addr_ntop(AF_INET,
+                &iface->config.ip.ipv4->unicast[0].netmask,
+                ipv4_netmask,
+                sizeof(ipv4_netmask));
+            net_addr_ntop(AF_INET,
+                &iface->config.ip.ipv4->gw,
+                ipv4_gw,
+                sizeof(ipv4_gw));
         }
 
-        if (flags & FLAG_DISCONNECTED)
+        if (flags & (FLAG_DISCONNECTED | FLAG_RETRY_CONNECT))
         {
-            RTOS_FLAGS_CLR(&wifi_flags, FLAG_DISCONNECTED);
+            ipv4_addr[0] = '\0';
+            ipv4_netmask[0] = '\0';
+            ipv4_gw[0] = '\0';
+            have_ip = false;
+
+            RTOS_FLAGS_CLR(&wifi_flags, (FLAG_DISCONNECTED | FLAG_RETRY_CONNECT));
+
+            if (retry_attempts == 3)
+            {
+                retry_attempts = 0;
+                /* We've failed to reconnect a number of times. */
+                if (unrecoverable_error_cb)
+                {
+                    unrecoverable_error_cb();
+                    continue;
+                }
+                LOG_ERR("WIFI unrecoverable error, exiting thread.");
+                return;
+            }
+
+            /* Force a clean disconnect to attempt to clear wifi state before
+                attempting reconnect. */
+            disconnect();
 
             /* Sleep before attempting to reconnect. */
             RTOS_TASK_SLEEP_ms(3000);
 
+            LOG_INF("Bringing interface down.");
             net_if_down(iface);
-            LOG_INF("Interface down.");
-            RTOS_TASK_SLEEP_ms(500);
+            RTOS_TASK_SLEEP_ms(1000);
 
+            LOG_INF("Bringing interface back up.");
             net_if_up(iface);
-            RTOS_TASK_SLEEP_ms(500);
-            LOG_INF("Interface up.");
 
-            LOG_INF("Attempting to reconnect...");
+            LOG_INF("Attempting reconnect %u...", retry_attempts);
             connect(ssid, pass);
         }
     }

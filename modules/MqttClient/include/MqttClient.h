@@ -11,6 +11,7 @@
 
 #include <zephyr/net/socket.h>
 #include <zephyr/net/mqtt.h>
+#include "RtosUtils.h"
 
 #if !defined(CONFIG_MQTTCLIENT_SERVER_PORT)
 #define MQTTCLIENT_SERVER_PORT      1883

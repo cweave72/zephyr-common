@@ -73,7 +73,7 @@ Cobs_encode(
         {
             /*  Non-null byte, store in the output buffer. */
             wr_idx = code_word_idx + count;
-            CHECK_OVERFLOW(wr_idx == max_enc_len);
+            CHECK_OVERFLOW(wr_idx >= max_enc_len);
             enc_out[wr_idx] = byte;
         }
     }

@@ -1497,12 +1497,14 @@ WS2812Led_init(
 
     seg->startIdx = 0;
     seg->endIdx = numPixels - 1;
+    seg->loopDelay_ms = segLoop_ms;
     seg->taskStackSize = segStackSize;
     seg->taskPrio = segPrio;
     strncpy(seg->taskName, name, sizeof(seg->taskName));
     strncat(seg->taskName, "_seg", sizeof(seg->taskName));
 
     LOG_INF("seg->startIdx = %u", seg->startIdx);
+    LOG_INF("seg->loopDelay_ms = %u", seg->loopDelay_ms);
 
     if (!device_is_ready(dev))
     {

@@ -1,0 +1,16 @@
+config PUBLISHER
+	bool "Enable the Publisher lib"
+	default n
+	depends on MQTTCLIENT
+	depends on PBGENERIC
+	help
+	  Encapsulates MQTT topic publishing.
+
+config PUBLISHER_MAX_STRING_SIZE
+	int "Max size for a Publisher string payload."
+	default 128
+	depends on PUBLISHER
+
+module = PUBLISHER
+module-str = "Publisher"
+source "subsys/logging/Kconfig.template.log_config"

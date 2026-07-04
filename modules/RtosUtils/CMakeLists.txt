@@ -4,7 +4,9 @@ if (CONFIG_RTOSUTILS)
              "src/RtosUtilsRpc.c"
         )
     zephyr_include_directories(include)
-    zephyr_library_sources(${srcs})
+    zephyr_library_sources("src/RtosUtils.c")
+    zephyr_library_sources_ifdef(CONFIG_RTOSUTILS_RPC "src/RtosUtilsRpc.c")
+    #zephyr_library_sources(${srcs})
 
 endif()
          

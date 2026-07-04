@@ -16,6 +16,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(MqttClient, CONFIG_MQTTCLIENT_LOG_LEVEL);
 
+#define MQTT_VERSION MQTT_VERSION_3_1_1
+
 /******************************************************************************
     event_handler
 *//**
@@ -262,14 +264,12 @@ client_thread(void *p, void *arg1, void *arg2)
 
     while (1)
     {
-        int ret;
-
         if (mqc->connected)
         {
             /* Poll for input data. */
             wait_poll_input(mqc);
 
-            //ret = mqtt_ping(client);
+            //int ret = mqtt_ping(client);
             //if (ret < 0)
             //{
             //    LOG_ERR("mqtt_ping failed: %d", ret);
@@ -361,10 +361,13 @@ MqttClient_connect(MqttClient *mqc)
     struct mqtt_client *client = &mqc->mclient;
     int ret;
 
+    LOG_INF("Attempting to connect to broker at %s:%u",
+        MQTTCLIENT_SERVER_ADDR, MQTTCLIENT_SERVER_PORT);
+
     ret = mqtt_connect(client);
     if (ret != 0)
     {
-        LOG_ERR("mqtt_connect: %d", ret);
+        LOG_ERR("mqtt_connect error: %d", ret);
     }
 
     /*  On successfull connect, create file descriptors and wait for reply from
@@ -408,7 +411,7 @@ MqttClient_init(MqttClient *mqc, char *client_id)
     client->client_id.size   = strlen(client_id);
     client->password         = NULL;
     client->user_name        = NULL;
-    client->protocol_version = MQTT_VERSION_3_1_1;
+    client->protocol_version = MQTT_VERSION;  //MQTT_VERSION_3_1_1;
     client->rx_buf           = mqc->rx_buffer;
     client->rx_buf_size      = sizeof(mqc->rx_buffer);
     client->tx_buf           = mqc->tx_buffer;

@@ -2,6 +2,10 @@ config PROTORPC
 	bool "Enable the ProtoRpc lib"
 	depends on PBGENERIC
 
+config PROTORPC_MAX_MSG_SIZE
+	int "Max on-the-wire size for a packed protobuf message."
+	default 2048
+
 config PROTORPC_TRACE_MODULE
 	bool "Enables Tracing of this module."
 
