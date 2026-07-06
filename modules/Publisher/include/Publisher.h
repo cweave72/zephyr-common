@@ -8,7 +8,6 @@
 
 #include <stdio.h>
 #include "MqttClient.h"
-#include "Publisher.pb.h"
 
 typedef enum Publisher_topic_type_t
 {
@@ -18,11 +17,11 @@ typedef enum Publisher_topic_type_t
     PUB_TYPE_PROTOBUF = 3
 } Publisher_topic_type_t;
 
-#define PUB_MSG_LEVEL_CRITICAL 0x30
-#define PUB_MSG_LEVEL_ERROR    0x31
-#define PUB_MSG_LEVEL_WARN     0x32
-#define PUB_MSG_LEVEL_INFO     0x33
-#define PUB_MSG_LEVEL_DEBUG    0x34
+#define PUB_MSG_LEVEL_CRITICAL 0
+#define PUB_MSG_LEVEL_ERROR    1
+#define PUB_MSG_LEVEL_WARN     2
+#define PUB_MSG_LEVEL_INFO     3
+#define PUB_MSG_LEVEL_DEBUG    4
 
 typedef struct Publisher_bytes_t
 {

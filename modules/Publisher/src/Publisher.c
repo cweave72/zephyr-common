@@ -17,8 +17,6 @@ static MqttClient mqttClient;
 static char clientId[24];
 
 Publisher_topic_t sysmsg_topic;
-static Publisher_topic_t sysid_topic;
-static Publisher_SystemId  sysid;
 
 /******************************************************************************
     [docimport Publisher_createTopic]
@@ -133,17 +131,6 @@ Publisher_publish(Publisher_topic_t *topic)
 }
 
 /******************************************************************************
-    [docimport Publisher_sendSysId]
-*//**
-    @brief Sends the System ID message.
-******************************************************************************/
-void
-Publisher_sendSysId(void)
-{
-    Publisher_publish(&sysid_topic);
-}
-
-/******************************************************************************
     [docimport Publisher_init]
 *//**
     @brief Publisher initializer. Derives a client id from the last octet
@@ -161,25 +148,6 @@ Publisher_init(const char *ip_addr)
     snprintf(clientId, sizeof(clientId), "pubid-%s", last_octet);
 
     Publisher_createTopic(&sysmsg_topic, "sysmsg", PUB_TYPE_MSG);
-
-    buf = k_malloc(Publisher_SystemId_size);
-    if (!buf)
-    {
-        LOG_ERR("Error allocating memory for publisher system Id message.");
-        return -ENOMEM;
-    }
-
-    Publisher_setProtobuf(
-        &sysid_topic, 
-        (void *)Publisher_SystemId_fields,
-        &sysid,
-        buf,
-        Publisher_SystemId_size);
-
-    /* Copy provided ip address into the system id struct. */
-    strncpy(sysid.ip, ip_addr, sizeof(sysid.ip));
-
-    Publisher_createTopic(&sysid_topic, "sysid", PUB_TYPE_PROTOBUF);
 
     LOG_INF("Initializing Publisher with clientId: %s", clientId);
     return MqttClient_init(&mqttClient, clientId);
