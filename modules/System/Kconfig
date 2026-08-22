@@ -1,0 +1,17 @@
+config SYSTEM
+	bool "Enable the System lib."
+
+config SYSTEMRPC
+	bool "Enable the SystemRpc."
+	depends on SYSTEM
+	depends on NANOPB
+	depends on PBGENERIC
+	depends on PROTORPC
+
+module = SYSTEM
+module-str = "System"
+source "subsys/logging/Kconfig.template.log_config"
+
+module = SYSTEMRPC
+module-str = "SystemRpc"
+source "subsys/logging/Kconfig.template.log_config"

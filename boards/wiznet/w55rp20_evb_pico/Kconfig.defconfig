@@ -1,0 +1,40 @@
+# Copyright (c) 2026 Mason Lee
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_W55RP20_EVB_PICO
+
+if NETWORKING
+
+config NET_L2_ETHERNET
+	default y
+
+endif # NETWORKING
+
+if I2C_DW
+
+config I2C_DW_CLOCK_SPEED
+	default 125
+
+endif # I2C_DW
+
+config USB_SELF_POWERED
+	default n
+
+# Local addition (not upstream): UART0 on GP0/GP1 needs an external USB-TTL
+# adapter, so this board puts the console on USB CDC-ACM by default -- see the
+# chosen node in w55rp20_evb_pico.dts. USB_DEVICE_INITIALIZE_AT_BOOT has no
+# default of its own, so without it nothing calls usb_enable(), the device never
+# enumerates, and the build looks fine while the port stays dead. Mirrors the
+# idiom used by in-tree boards that expose a USB console. See README.md.
+if USB_DEVICE_STACK
+
+config USB_DEVICE_INITIALIZE_AT_BOOT
+	default y if CONSOLE
+
+config SHELL_BACKEND_SERIAL_CHECK_DTR
+	default SHELL
+	depends on UART_LINE_CTRL
+
+endif # USB_DEVICE_STACK
+
+endif # BOARD_W55RP20_EVB_PICO
