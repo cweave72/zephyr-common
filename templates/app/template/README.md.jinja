@@ -18,6 +18,7 @@ improvements on top of your local edits.
 | Tracing | {{ "yes" if use_tracing else "no" }} |
 | NV settings | {{ "yes" if use_nv else "no" }} |
 | Shell | {{ "yes" if use_shell else "no" }} |
+| Onboard LED | {{ "yes" if use_led else "no" }} |
 {% if modules -%}
 | Modules | {% for m, lvl in modules.items() %}`{{ m }}`({{ lvl }}){% if not loop.last %}, {% endif %}{% endfor %} |
 {% endif %}
@@ -82,6 +83,18 @@ rtosutils-cli --ip <device-ip> ...
 ```
 
 Build the host-side protobuf bindings with `make proto`.
+{% endif %}
+{% if use_led %}
+## LED
+
+`src/led.h` exposes `app_led_init()`, `app_led_set()` and `app_led_toggle()`,
+driving the devicetree `led0` alias the way `applications/blinky` does.
+
+Boards that define `led0` in their own devicetree work as-is. For boards that do
+not, `boards/<board>.overlay` supplies the alias; where the generator did not
+know the pin it left a commented template there for you to fill in. Everything
+degrades to a no-op plus one startup warning if no alias exists, so the app
+still builds and runs.
 {% endif %}
 ## Layout
 

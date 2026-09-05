@@ -36,7 +36,13 @@ int app_trace_init(void);
 #else
 static inline int app_trace_init(void) { return 0; }
 #endif
-{% for mod in modules if mod != 'TraceModule' %}
+{%- if use_led %}
+
+/** @brief Configures the onboard LED. Safe to call on a board with no led0
+    alias -- see led.h. */
+int app_led_init(void);
+{%- endif %}
+{%- for mod in modules if mod != 'TraceModule' %}
 int app_{{ mod }}_init(void);
 {%- endfor %}
 

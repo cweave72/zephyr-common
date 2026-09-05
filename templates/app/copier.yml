@@ -71,6 +71,11 @@ use_nv:
   help: Include NVS-backed settings (NvParms)
   default: "{{ net_type == 'wifi' }}"
 
+use_led:
+  type: bool
+  help: Drive the onboard LED via the devicetree "led0" alias
+  default: true
+
 use_shell:
   type: bool
   help: Enable the Zephyr shell

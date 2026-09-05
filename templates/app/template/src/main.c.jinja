@@ -14,6 +14,11 @@ main(void)
     int ret;
 
     LOG_INF("{{ app_name }} starting.");
+{%- if use_led %}
+
+    /* Not fatal: a board without an led0 alias logs a warning and continues. */
+    (void)app_led_init();
+{%- endif %}
 
     ret = app_net_init();
     if (ret < 0)

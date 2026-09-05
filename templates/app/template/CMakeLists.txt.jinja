@@ -10,6 +10,9 @@ set(CONFIG_OUTPUT_DISASSEMBLY_WITH_SOURCE y CACHE INTERNAL "")
 list(APPEND EXTRA_CONF_FILE
     ${CMAKE_CURRENT_SOURCE_DIR}/conf/kernel.conf
     ${CMAKE_CURRENT_SOURCE_DIR}/conf/modules.conf
+{%- if use_led %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/led.conf
+{%- endif %}
 {%- if net_type != 'none' %}
     ${CMAKE_CURRENT_SOURCE_DIR}/conf/net.conf
 {%- endif %}
@@ -68,6 +71,9 @@ target_sources(
     ${target}
     PRIVATE
     src/main.c
+{%- if use_led %}
+    src/led.c
+{%- endif %}
 {%- if use_rpc %}
     src/rpc.c
 {%- endif %}
