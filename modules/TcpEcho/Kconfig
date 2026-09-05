@@ -1,6 +1,8 @@
 config TCPECHO
 	bool "Enable the TcpEcho server lib"
 	default n
+	depends on TCPSERVER
+	depends on TCPSOCKET
 
 module = TCPECHO
 module-str = "TcpEcho"

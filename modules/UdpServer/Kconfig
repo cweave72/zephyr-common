@@ -1,6 +1,7 @@
 config UDPSERVER
 	bool "Enable the UdpServer lib"
 	depends on UDPSOCKET
+	depends on RTOSUTILS
 
 module = UDPSERVER
 module-str = "UdpServer"

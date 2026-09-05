@@ -3,6 +3,8 @@ config TCPRPCSERVER
 	default n
 	depends on TCPSERVER
 	depends on PROTORPC
+	depends on TCPSOCKET
+	depends on COBS
 
 config TCPRPCSERVER_PORT
 	int "TCP port for the TcpRpcServer"

@@ -1,6 +1,8 @@
 config TCPSERVER
 	bool "Enable the TcpServer lib"
 	default n
+	depends on TCPSOCKET
+	depends on RTOSUTILS
 
 module = TCPSERVER
 module-str = "TcpServer"

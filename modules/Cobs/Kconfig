@@ -1,6 +1,7 @@
 config COBS
 	bool "Enable the COBS (Consistent Overhead Byte Stuffing) Library"
 	default n
+	depends on SWFIFO
 	help
 		Encoder and decoder for framing serial streams.
 

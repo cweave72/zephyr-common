@@ -1,6 +1,7 @@
 config MQTTCLIENT
 	bool "Enable the MqttClient lib"
 	depends on MQTT_LIB
+	depends on RTOSUTILS
 
 config MQTTCLIENT_SERVER_PORT
 	int "Port for the mqtt server."

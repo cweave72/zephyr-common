@@ -2,6 +2,8 @@ config WS2812LED
 	bool "Enable WS2812Led module."
 	default n
 	depends on LED_STRIP
+	depends on RANDOM
+	depends on RTOSUTILS
 	help
 		A module for WS2812 led strip effects.
 

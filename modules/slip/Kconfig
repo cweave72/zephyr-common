@@ -1,6 +1,7 @@
 config SLIP_FRAME
 	bool "Enable the SLIP (Serial Line Interface) framing library"
 	default n
+	depends on SWFIFO
 	help
 		Encoder and decoder for framing serial streams.
 

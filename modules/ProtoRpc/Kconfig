@@ -8,6 +8,7 @@ config PROTORPC_MAX_MSG_SIZE
 
 config PROTORPC_TRACE_MODULE
 	bool "Enables Tracing of this module."
+	depends on TRACEMODULE
 
 config PROTORPC_TRACE_MODULE_ID
 	int "TraceModule ID for this module (see TraceModule.h)."
