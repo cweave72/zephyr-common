@@ -1,0 +1,8 @@
+name: probe-console
+boards:
+  # Matched against "${BOARD}${BOARD_QUALIFIERS}", which is
+  # 'w55rp20_evb_pico/rp2040' here -- so the plain board name never matches.
+  # Slashes make this a regex, keeping it valid whatever the qualifiers are.
+  /w55rp20_evb_pico.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: boards/w55rp20_evb_pico.overlay

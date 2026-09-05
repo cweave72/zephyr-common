@@ -19,11 +19,20 @@ endif()
 
 board_runner_args(openocd --cmd-pre-init "source [find interface/${RPI_PICO_DEBUG_ADAPTER}.cfg]")
 board_runner_args(openocd --cmd-pre-init "transport select swd")
-board_runner_args(openocd --cmd-pre-init "source [find target/rp2040.cfg]")
+# Board-local target config rather than the stock target/rp2040.cfg: the module's
+# Puya flash is not in OpenOCD's SPI device table, and Zephyr wants core0 only.
+# Found via the -s <board>/support search path the runner adds. See that file.
+board_runner_args(openocd --cmd-pre-init "source [find w55rp20_evb_pico-rp2040.cfg]")
 
 # The adapter speed is expected to be set by interface configuration.
 # But if not so, set 2000 to adapter speed.
 board_runner_args(openocd --cmd-pre-init "set_adapter_speed_if_not_set 2000")
+
+# The target config names its target _TARGETNAME_0 (matching the upstream rp2040
+# naming), not the plain _TARGETNAME the runner assumes by default. Without this,
+# 'west debug' fails on an undefined variable as soon as CONFIG_DEBUG_THREAD_INFO
+# is set, because the runner emits "$_TARGETNAME configure -rtos Zephyr".
+board_runner_args(openocd --target-handle=_TARGETNAME_0)
 
 board_runner_args(jlink "--device=RP2040_M0_0")
 board_runner_args(uf2 "--board-id=RPI-RP2")

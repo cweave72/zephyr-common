@@ -1,0 +1,3 @@
+name: debug-noopt
+append:
+  EXTRA_CONF_FILE: debug-noopt.conf

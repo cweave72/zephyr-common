@@ -1,0 +1,24 @@
+/*
+ * Move the console from USB CDC-ACM onto UART0 (GP0/GP1), where a Raspberry Pi
+ * Debug Probe's UART bridge lands.
+ *
+ * The default CDC-ACM console is enumerated by the RP2040 itself, so it stops
+ * being serviced the moment gdb halts the core: the host drops the device and
+ * the console dies mid-session. The probe is a separate MCU, so a console on the
+ * wire survives halts, single-stepping and resets.
+ *
+ * Wiring (probe "U" connector): probe TX -> GP1 (UART0 RX),
+ * probe RX -> GP0 (UART0 TX), GND -> GND.
+ *
+ * uart0 is already status = "okay" with uart0_default pinctrl in the board dts,
+ * so only the chosen nodes need repointing.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+	};
+};
