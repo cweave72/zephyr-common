@@ -1,0 +1,101 @@
+# Zephyr application template.
+#
+# Normally driven through `app_gen` (python/app_generator), which supplies these
+# answers programmatically and additionally writes the per-board files, whose
+# set is discovered from common/boards and so cannot be enumerated here.
+#
+# Direct use also works:  copier copy common/templates/app applications/myapp
+
+_subdirectory: template
+_answers_file: .copier-answers.yml
+
+app_name:
+  type: str
+  help: Application name (also the CMake project() name and directory name)
+  validator: >-
+    {% if not (app_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    app_name must be lowercase alphanumeric with underscores, starting with a letter.
+    {% endif %}
+
+description:
+  type: str
+  help: One-line description
+  default: "A Zephyr application."
+
+net_type:
+  type: str
+  help: Networking transport
+  default: wifi
+  choices:
+    - none
+    - wifi
+    - serial
+    - eth
+    - usb
+
+ip_mode:
+  type: str
+  help: IPv4 addressing
+  default: dhcp
+  choices: [dhcp, static]
+  when: "{{ net_type != 'none' }}"
+
+ipv4_addr:
+  type: str
+  default: "192.168.1.15"
+  when: "{{ net_type != 'none' and ip_mode == 'static' }}"
+
+ipv4_mask:
+  type: str
+  default: "255.255.255.0"
+  when: "{{ net_type != 'none' and ip_mode == 'static' }}"
+
+ipv4_gw:
+  type: str
+  default: "192.168.1.1"
+  when: "{{ net_type != 'none' and ip_mode == 'static' }}"
+
+use_rpc:
+  type: bool
+  help: Include the TCP/COBS ProtoRpc server (requires networking)
+  default: true
+  when: "{{ net_type != 'none' }}"
+
+use_tracing:
+  type: bool
+  help: Include CTF tracing with the TraceRam backend
+  default: false
+
+use_nv:
+  type: bool
+  help: Include NVS-backed settings (NvParms)
+  default: "{{ net_type == 'wifi' }}"
+
+use_shell:
+  type: bool
+  help: Enable the Zephyr shell
+  default: false
+
+# {module_name: log_level}. Supplied by app_gen; see modules.py SELECTABLE.
+modules:
+  type: yaml
+  help: "Optional common/modules to enable, e.g. {TcpServer: wrn}"
+  default: {}
+
+echoserver_transport:
+  type: str
+  default: udp
+  choices: [udp, tcp]
+  when: "{{ 'EchoServer' in modules }}"
+
+# Computed by app_gen and passed in; not prompted. Holds the resolved Kconfig
+# dependency closure so the templates need no Kconfig knowledge.
+_module_symbols:
+  type: yaml
+  default: {}
+  when: false
+
+_board_list:
+  type: yaml
+  default: []
+  when: false

@@ -1,0 +1,66 @@
+/*******************************************************************************
+ *  @file: net_wifi.c
+ *
+ *  @brief: app_net_init() for wifi. Credentials come from NV settings; see the
+ *          README for how to write them.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/reboot.h>
+
+#include "NvParms.h"
+#include "WifiConnect.h"
+#include "app.h"
+#if defined(CONFIG_APP_USE_STATIC_IP)
+#include "net_ip.h"
+#endif
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+static void
+wifi_error(void)
+{
+    LOG_ERR("Wifi error. Rebooting system.");
+    sys_reboot(SYS_REBOOT_COLD);
+}
+
+int
+app_net_init(void)
+{
+    char ssid[32];
+    char pass[32];
+    int ret, pass_len;
+
+    ret = NvParms_init();
+    if (ret < 0)
+    {
+        LOG_ERR("NvParms module init error: %d", ret);
+        return ret;
+    }
+
+    ret = NvParms_load("ssid", NVPARMS_TYPE_STRING, ssid, sizeof(ssid));
+    if (ret <= 0)
+    {
+        LOG_ERR("Error getting ssid from NV: %d", ret);
+        return -1;
+    }
+
+    pass_len = NvParms_load("pass", NVPARMS_TYPE_STRING, pass, sizeof(pass));
+    if (pass_len <= 0)
+    {
+        LOG_ERR("Error getting pass from NV: %d", pass_len);
+        return -1;
+    }
+
+    LOG_DBG("ssid=%s", ssid);
+    LOG_DBG("password length=%d", pass_len);
+
+#if defined(CONFIG_APP_USE_STATIC_IP)
+    /* Applied before associating. Note the board fragment must also disable the
+       driver's own DHCP (CONFIG_ESP32_WIFI_STA_AUTO_DHCPV4=n on esp32 parts),
+       which app_gen writes for you. */
+    app_net_static_ip_apply();
+#endif
+
+    return WifiConnect_connect(ssid, pass, wifi_error);
+}

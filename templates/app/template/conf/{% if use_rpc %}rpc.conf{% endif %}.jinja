@@ -1,0 +1,24 @@
+CONFIG_NANOPB=y
+
+# ProtoRpc core and the TCP/COBS transport.
+CONFIG_PROTORPC=y
+CONFIG_PBGENERIC=y
+CONFIG_COBS=y
+CONFIG_SWFIFO=y
+CONFIG_TCPSOCKET=y
+CONFIG_TCPSERVER=y
+CONFIG_TCPRPCSERVER=y
+CONFIG_RTOSUTILS=y
+
+# Callsets registered by src/rpc.c. Additional callsets are added by hand;
+# discovery is automatic over the wire (callset_query), so there is no
+# callsets.yaml to maintain.
+CONFIG_SYSTEM=y
+CONFIG_SYSTEMRPC=y
+CONFIG_RTOSUTILS_RPC=y
+
+# Logging
+CONFIG_PROTORPC_LOG_LEVEL_INF=y
+CONFIG_TCPSOCKET_LOG_LEVEL_INF=y
+CONFIG_TCPRPCSERVER_LOG_LEVEL_INF=y
+CONFIG_SYSTEMRPC_LOG_LEVEL_INF=y

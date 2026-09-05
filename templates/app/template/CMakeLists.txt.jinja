@@ -1,0 +1,139 @@
+cmake_minimum_required(VERSION 3.13.1)
+message("WORKSPACE_BASE = $ENV{WORKSPACE_BASE}")
+message("ZEPHYR_BASE = $ENV{ZEPHYR_BASE}")
+message("ZEPHYR_SDK_INSTALL_DIR = $ENV{ZEPHYR_SDK_INSTALL_DIR}")
+message("ZEPHYR_TOOLCHAIN_VARIANT = $ENV{ZEPHYR_TOOLCHAIN_VARIANT}")
+
+set(CONFIG_OUTPUT_DISASSEMBLY y CACHE INTERNAL "")
+set(CONFIG_OUTPUT_DISASSEMBLY_WITH_SOURCE y CACHE INTERNAL "")
+
+list(APPEND EXTRA_CONF_FILE
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/kernel.conf
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/modules.conf
+{%- if net_type != 'none' %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/net.conf
+{%- endif %}
+{%- if use_nv %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/nv.conf
+{%- endif %}
+{%- if use_rpc %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/rpc.conf
+{%- endif %}
+{%- if use_tracing %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/tracing.conf
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/tracemodule.conf
+{%- endif %}
+)
+{% if net_type != 'none' %}
+# Which networking fragment to apply. Declare the type with
+# CONFIG_APP_NET_TYPE_<X>=y in boards/<board>.conf (or prj.conf); the helper reads
+# that declaration here, because CONFIG_* are not CMake variables until
+# find_package(Zephyr) below has run Kconfig -- by which point EXTRA_CONF_FILE is
+# already consumed. See the header of app_net_type.cmake.
+#
+# The "{{ net_type }}" fallback must match the 'choice APP_NET_TYPE' default in Kconfig.
+include($ENV{WORKSPACE_BASE}/common/scripts/cmake/app_net_type.cmake)
+app_net_type_resolve(APP_NET_TYPE {{ net_type }})
+
+if (APP_NET_TYPE STREQUAL "wifi")
+    list(APPEND EXTRA_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/conf/wifi.conf)
+elseif (APP_NET_TYPE STREQUAL "serial")
+    list(APPEND EXTRA_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/conf/serial_net.conf)
+elseif (APP_NET_TYPE STREQUAL "eth")
+    list(APPEND EXTRA_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/conf/wired_eth_net.conf)
+elseif (APP_NET_TYPE STREQUAL "usb")
+    list(APPEND EXTRA_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/conf/usb_net.conf)
+endif()
+
+# Applied LAST so the addressing decision cannot be overridden by a transport
+# fragment. CONFIG_NET_DHCPV4 and the APP_IPV4_* symbols live only in this file.
+list(APPEND EXTRA_CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/conf/ip.conf)
+{% endif %}
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+{% if net_type != 'none' %}
+# Kconfig has now run. Fail loudly if it disagrees with the fragment we applied.
+app_net_type_verify(${APP_NET_TYPE})
+{% endif %}
+project({{ app_name }})
+
+set(target app)
+{% if use_rpc %}
+# Include the cmake script which builds protobuf bindings.
+include($ENV{WORKSPACE_BASE}/common/scripts/cmake/build_proto.cmake)
+
+# The following creates the target ${target}_proto.
+nanopb_build_sources(${target} $ENV{WORKSPACE_BASE}/proto)
+{% endif %}
+target_sources(
+    ${target}
+    PRIVATE
+    src/main.c
+{%- if use_rpc %}
+    src/rpc.c
+{%- endif %}
+{%- for mod in modules if mod != 'TraceModule' %}
+    src/{{ mod }}.c
+{%- endfor %}
+    )
+{% if net_type != 'none' %}
+# Exactly one net_*.c provides app_net_init(). net_l4.c carries the bring-up
+# sequence shared by the three transports that use Zephyr's connection manager.
+target_sources_ifdef(
+    CONFIG_APP_NET_TYPE_WIFI
+    ${target}
+    PRIVATE
+    src/net_wifi.c
+    )
+
+target_sources_ifdef(
+    CONFIG_APP_NET_TYPE_SERIAL
+    ${target}
+    PRIVATE
+    src/net_wired.c
+    src/net_l4.c
+    )
+
+target_sources_ifdef(
+    CONFIG_APP_NET_TYPE_ETH
+    ${target}
+    PRIVATE
+    src/net_wired.c
+    src/net_l4.c
+    )
+
+target_sources_ifdef(
+    CONFIG_APP_NET_TYPE_USB
+    ${target}
+    PRIVATE
+    src/net_usb.c
+    src/net_l4.c
+    )
+
+target_sources_ifdef(
+    CONFIG_APP_USE_STATIC_IP
+    ${target}
+    PRIVATE
+    src/net_ip.c
+    )
+{% endif %}
+{%- if use_tracing %}
+target_sources_ifdef(
+    CONFIG_TRACERAM
+    ${target}
+    PRIVATE
+    src/trace.c
+    $ENV{WORKSPACE_BASE}/common/modules/TraceRam/src/TraceRam_backend.c
+    )
+{% endif %}
+target_compile_options(
+    ${target}
+    PUBLIC
+    -fmax-errors=5
+    )
+{% if use_rpc %}
+target_link_libraries(
+    ${target}
+    INTERFACE
+    ${target}_proto
+    )
+{% endif %}

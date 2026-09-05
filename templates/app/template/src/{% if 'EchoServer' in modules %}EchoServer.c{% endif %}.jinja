@@ -1,0 +1,45 @@
+/*******************************************************************************
+ *  @file: EchoServer.c
+ *
+ *  @brief: App-level init for the EchoServer module.
+ *
+ *  The example below is adapted from applications/echo_server/src/main.c:65 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "EchoServer.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+#if 0
+static EchoServer echo;
+#endif
+
+int
+app_EchoServer_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    int ret;
+
+    /* Transport is chosen by CONFIG_ECHOSERVER_TRANSPORT_{UDP,TCP}; this app
+       was generated for {{ echoserver_transport | default('udp') | upper }}. */
+    ret = EchoServer_init(
+        &echo,
+        12001,          /* port        */
+        NULL,           /* buf         */
+        1024,           /* buf_len     */
+        4*1024,         /* stack size  */
+        "Echo Server",  /* thread name */
+        20);            /* priority    */
+    if (ret < 0)
+    {
+        LOG_ERR("Error initializing Echo server: %d", ret);
+        return ret;
+    }
+#endif
+    return 0;
+}

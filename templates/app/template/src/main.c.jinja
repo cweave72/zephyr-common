@@ -1,0 +1,47 @@
+/** @brief {{ description }}
+*/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "app.h"
+
+/** @brief Initialize the logging module. */
+LOG_MODULE_REGISTER(app, CONFIG_APP_LOG_LEVEL);
+
+int
+main(void)
+{
+    int ret;
+
+    LOG_INF("{{ app_name }} starting.");
+
+    ret = app_net_init();
+    if (ret < 0)
+    {
+        LOG_ERR("Network init failed: %d", ret);
+        return 0;
+    }
+
+    ret = app_rpc_init();
+    if (ret < 0)
+    {
+        LOG_ERR("RPC init failed: %d", ret);
+        return 0;
+    }
+{% for mod in modules if mod != 'TraceModule' %}
+    ret = app_{{ mod }}_init();
+    if (ret < 0)
+    {
+        LOG_ERR("{{ mod }} init failed: %d", ret);
+        return 0;
+    }
+{% endfor %}
+    app_trace_init();
+
+    while (1)
+    {
+        k_msleep(5000);
+    }
+
+    return 0;
+}

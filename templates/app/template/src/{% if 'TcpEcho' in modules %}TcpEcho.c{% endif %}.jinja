@@ -1,0 +1,44 @@
+/*******************************************************************************
+ *  @file: TcpEcho.c
+ *
+ *  @brief: App-level init for the TcpEcho module.
+ *
+ *  The example below is adapted from applications/tcp_echo/src/main.c:65 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "TcpEcho.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+#if 0
+static TcpEcho tcp_echo;
+#endif
+
+int
+app_TcpEcho_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    int ret;
+
+    /* buf=NULL asks the server to allocate buf_len bytes itself. */
+    ret = TcpEcho_init(
+        &tcp_echo,
+        12001,          /* port       */
+        NULL,           /* buf        */
+        1024,           /* buf_len    */
+        4*1024,         /* stack size */
+        "TCP Echo",     /* thread name */
+        20);            /* priority   */
+    if (ret < 0)
+    {
+        LOG_ERR("Error initializing TcpEcho server: %d", ret);
+        return ret;
+    }
+#endif
+    return 0;
+}

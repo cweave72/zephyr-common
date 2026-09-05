@@ -1,0 +1,43 @@
+mainmenu "{{ description }}"
+
+menu "App Options"
+{% if net_type != 'none' %}
+	choice APP_NET_TYPE
+		prompt "Network type"
+		default APP_NET_TYPE_{{ net_type | upper }}
+
+		config APP_NET_TYPE_WIFI
+		bool "wifi network"
+
+		config APP_NET_TYPE_SERIAL
+		bool "serial net"
+
+		config APP_NET_TYPE_ETH
+		bool "wired ethernet networking"
+
+		config APP_NET_TYPE_USB
+		bool "usb (CDC-ECM) networking"
+	endchoice
+
+	config APP_USE_STATIC_IP
+	    bool "Use a static IP address rather than DHCP."
+
+	config APP_IPV4_ADDR
+	    string "Static IPv4 address."
+	    default "{{ ipv4_addr | default('192.0.2.1', true) }}"
+
+	config APP_IPV4_MASK
+	    string "Static IPv4 netmask."
+	    default "{{ ipv4_mask | default('255.255.255.0', true) }}"
+
+	config APP_IPV4_GW
+	    string "Static IPv4 gateway."
+	    default "{{ ipv4_gw | default('192.0.2.2', true) }}"
+{% endif %}
+endmenu
+
+source "Kconfig.zephyr"
+
+module = APP
+module-str = "app"
+source "subsys/logging/Kconfig.template.log_config"

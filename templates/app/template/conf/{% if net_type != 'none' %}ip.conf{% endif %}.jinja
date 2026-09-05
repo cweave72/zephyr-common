@@ -1,0 +1,12 @@
+# IPv4 addressing. Applied last in EXTRA_CONF_FILE so nothing overrides it;
+# CONFIG_NET_DHCPV4 and the APP_IPV4_* symbols appear in no other fragment.
+{% if ip_mode == 'static' %}
+CONFIG_APP_USE_STATIC_IP=y
+CONFIG_APP_IPV4_ADDR="{{ ipv4_addr }}"
+CONFIG_APP_IPV4_MASK="{{ ipv4_mask }}"
+CONFIG_APP_IPV4_GW="{{ ipv4_gw }}"
+CONFIG_NET_DHCPV4=n
+{% else %}
+CONFIG_APP_USE_STATIC_IP=n
+CONFIG_NET_DHCPV4=y
+{% endif %}

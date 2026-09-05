@@ -1,0 +1,31 @@
+/*******************************************************************************
+ *  @file: net_usb.c
+ *
+ *  @brief: app_net_init() for USB CDC-ECM. Identical to the wired path apart
+ *          from enabling the USB device stack first -- conf/usb_net.conf sets
+ *          CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=n so that happens here.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/usb/usb_device.h>
+
+#include "app.h"
+#include "net_l4.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+int
+app_net_init(void)
+{
+    int ret;
+
+    LOG_DBG("Enabling usb.");
+    ret = usb_enable(NULL);
+    if (ret != 0)
+    {
+        LOG_ERR("Cannot enable USB (%d)", ret);
+        return ret;
+    }
+
+    return app_net_l4_bringup();
+}

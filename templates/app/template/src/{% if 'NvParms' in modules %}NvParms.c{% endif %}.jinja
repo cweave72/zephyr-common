@@ -1,0 +1,41 @@
+/*******************************************************************************
+ *  @file: NvParms.c
+ *
+ *  @brief: App-level init for the NvParms module.
+ *
+ *  The example below is adapted from applications/tcp_echo/src/main.c:56 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "NvParms.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+int
+app_NvParms_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    char value[32];
+    int ret;
+
+    ret = NvParms_init();
+    if (ret < 0)
+    {
+        LOG_ERR("NvParms module init error: %d", ret);
+        return ret;
+    }
+
+    /* Values are written from the shell:  settings write <name> <value> */
+    ret = NvParms_load("ssid", NVPARMS_TYPE_STRING, value, sizeof(value));
+    if (ret <= 0)
+    {
+        LOG_ERR("Error reading 'ssid' from NV: %d", ret);
+        return -1;
+    }
+#endif
+    return 0;
+}

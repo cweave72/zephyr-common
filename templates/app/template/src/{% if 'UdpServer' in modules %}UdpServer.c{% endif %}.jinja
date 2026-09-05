@@ -1,0 +1,56 @@
+/*******************************************************************************
+ *  @file: UdpServer.c
+ *
+ *  @brief: App-level init for the UdpServer module.
+ *
+ *  The example below is adapted from common/modules/EchoServer/src/EchoServer.c:99 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "UdpServer.h"
+#include "UdpSocket.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+#if 0
+static UdpServer udp_server;
+static uint8_t udp_rx_buf[1024];
+
+static void
+server_callback(void *server, int sock, uint8_t *data, uint16_t len, int *finished)
+{
+    UdpServer *svr = (UdpServer *)server;
+    socklen_t addrlen = sizeof(svr->src_addr);
+
+    (void)UdpSocket_writeto(sock, data, len, &svr->src_addr, addrlen);
+    *finished = 1;
+}
+#endif
+
+int
+app_UdpServer_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    int ret;
+
+    ret = UdpServer_init(
+        &udp_server,
+        12001,                  /* port        */
+        udp_rx_buf,             /* buf         */
+        sizeof(udp_rx_buf),     /* buf_len     */
+        4*1024,                 /* stack size  */
+        "UDP Server",           /* thread name */
+        20,                     /* priority    */
+        server_callback);
+    if (ret < 0)
+    {
+        LOG_ERR("Error initializing UdpServer: %d", ret);
+        return ret;
+    }
+#endif
+    return 0;
+}

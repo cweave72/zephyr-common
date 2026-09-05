@@ -1,0 +1,20 @@
+# Enabled modules, with their Kconfig dependency closure resolved by app_gen.
+#
+# The closure is written out explicitly because Kconfig 'depends on' does not
+# auto-enable: a symbol whose dependency is unmet is silently dropped.
+{% for sym in _module_symbols.get('local', []) %}
+CONFIG_{{ sym }}=y
+{%- endfor %}
+{% if _module_symbols.get('zephyr') %}
+# Pulled in by the closure (Zephyr subsystems).
+{%- for sym in _module_symbols.get('zephyr', []) %}
+CONFIG_{{ sym }}=y
+{%- endfor %}
+{% endif %}
+{%- if _module_symbols.get('levels') %}
+
+# Per-module log levels.
+{%- for sym, lvl in _module_symbols.get('levels', {}).items() %}
+CONFIG_{{ sym }}_LOG_LEVEL_{{ lvl | upper }}=y
+{%- endfor %}
+{%- endif %}

@@ -1,0 +1,42 @@
+/*******************************************************************************
+ *  @file: MqttClient.c
+ *
+ *  @brief: App-level init for the MqttClient module.
+ *
+ *  The example below is adapted from common/modules/Publisher/src/Publisher.c:153 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "MqttClient.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+#if 0
+static MqttClient mqttClient;
+#endif
+
+int
+app_MqttClient_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    int ret;
+    char clientId[32];
+
+    /* Client ids must be unique on the broker; Publisher derives one from the
+       device's last IP octet. */
+    snprintf(clientId, sizeof(clientId), "{{ app_name }}-0");
+
+    LOG_INF("Initializing MqttClient with clientId: %s", clientId);
+    ret = MqttClient_init(&mqttClient, clientId);
+    if (ret < 0)
+    {
+        LOG_ERR("MqttClient init error: %d", ret);
+        return ret;
+    }
+#endif
+    return 0;
+}

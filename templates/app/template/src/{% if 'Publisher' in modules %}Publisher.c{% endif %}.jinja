@@ -1,0 +1,39 @@
+/*******************************************************************************
+ *  @file: Publisher.c
+ *
+ *  @brief: App-level init for the Publisher module.
+ *
+ *  The example below is adapted from applications/oled_demo/src/main.c:108 and is
+ *  inert behind #if 0 so a freshly generated app builds green. Delete the guard
+ *  once you have adapted it.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "Publisher.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+#if 0
+static Publisher_topic_t hello_topic;
+#endif
+
+int
+app_Publisher_init(void)
+{
+#if 0   /* TODO: enable and adapt. */
+    int ret;
+
+    /* Broker address. CONFIG_MQTTCLIENT_SERVER_ADDR is the configured default. */
+    ret = Publisher_init(CONFIG_MQTTCLIENT_SERVER_ADDR);
+    if (ret < 0)
+    {
+        LOG_ERR("Publisher init error: %d", ret);
+        return ret;
+    }
+
+    Publisher_createTopic(&hello_topic, "hello", PUB_TYPE_STRING);
+#endif
+    return 0;
+}
