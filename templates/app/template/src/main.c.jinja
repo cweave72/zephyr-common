@@ -45,6 +45,8 @@ main(void)
 {% endfor %}
     app_trace_init();
 
+    LOG_INF("{{ app_name }} running.");
+
     while (1)
     {
         k_msleep(5000);
