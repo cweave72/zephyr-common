@@ -4,9 +4,17 @@
 # answers programmatically and additionally writes the per-board files, whose
 # set is discovered from common/boards and so cannot be enumerated here.
 #
-# Direct use also works:  copier copy common/templates/app applications/myapp
+# This file lives at the repo ROOT, not beside the template in
+# templates/app/. Copier only treats a source as version-controlled when the
+# path it is given is a git repo *root* (copier._vcs.is_git_repo_root), and it
+# records the template commit in .copier-answers.yml only for such sources.
+# Without that commit `copier update` has nothing to diff against. So the
+# source is the zephyr-common repo itself and _subdirectory points at the
+# template.
+#
+# Direct use also works:  copier copy /path/to/common applications/myapp
 
-_subdirectory: template
+_subdirectory: templates/app/template
 _answers_file: .copier-answers.yml
 
 app_name:
