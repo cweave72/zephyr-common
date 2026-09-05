@@ -100,18 +100,3 @@ echoserver_transport:
   default: udp
   choices: [udp, tcp]
   when: "{{ 'EchoServer' in modules }}"
-
-# Computed by app_gen and passed in; never prompted (when: false). Holds the
-# resolved Kconfig dependency closure so the templates need no Kconfig
-# knowledge. Deliberately NOT underscore-prefixed: Copier treats "_" answers
-# as private and omits them from .copier-answers.yml, which breaks the old-
-# version render during `copier update`.
-module_symbols:
-  type: yaml
-  default: {}
-  when: false
-
-board_list:
-  type: yaml
-  default: []
-  when: false
