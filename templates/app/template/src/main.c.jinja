@@ -6,6 +6,9 @@
 #include <zephyr/logging/log.h>
 
 #include "app.h"
+{%- if use_led %}
+#include "led.h"
+{%- endif %}
 
 /** @brief Initialize the logging module. */
 LOG_MODULE_REGISTER(app, CONFIG_APP_LOG_LEVEL);

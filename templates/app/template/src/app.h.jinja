@@ -15,7 +15,12 @@
 *******************************************************************************/
 #ifndef APP_H
 #define APP_H
-
+{% if use_led %}
+/* Brings in app_led_init(), app_led_set() and app_led_toggle(). Included here
+   rather than re-declaring app_led_init, so led.h stays the single declaration
+   site for the LED API. */
+#include "led.h"
+{% endif %}
 /** @brief Brings the network up and blocks until it is usable.
     Provided by exactly one of src/net_*.c -- see CMakeLists.txt. */
 #if defined(CONFIG_APP_NET_TYPE_WIFI) || defined(CONFIG_APP_NET_TYPE_SERIAL) \
@@ -36,12 +41,6 @@ int app_trace_init(void);
 #else
 static inline int app_trace_init(void) { return 0; }
 #endif
-{%- if use_led %}
-
-/** @brief Configures the onboard LED. Safe to call on a board with no led0
-    alias -- see led.h. */
-int app_led_init(void);
-{%- endif %}
 {%- for mod in modules if mod != 'TraceModule' %}
 int app_{{ mod }}_init(void);
 {%- endfor %}
