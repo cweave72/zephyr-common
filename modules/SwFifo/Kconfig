@@ -2,6 +2,17 @@ config SWFIFO
 	bool "Enable the SwFifo lib"
 	default n
 
+config SWFIFO_LOCKING
+	bool "Compile in SwFifo locking"
+	default y
+	depends on SWFIFO
+	help
+	  Compiles in spinlock protection for fifos created with the threadsafe
+	  flag set. A spinlock is used rather than a mutex so that a fifo shared
+	  between an ISR and a thread can be protected; mutexes are illegal in an
+	  ISR and cannot block one in any case. Fifos created with threadsafe
+	  clear are unaffected and take no lock.
+
 module = SWFIFO
 module-str = "SwFifo"
 source "subsys/logging/Kconfig.template.log_config"

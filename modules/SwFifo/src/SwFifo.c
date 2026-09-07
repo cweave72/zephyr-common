@@ -47,25 +47,67 @@ do {                                    \
 /** @brief Macro for checking fifo full status. */
 #define isFull(pf)       ((count((pf)) == (pf)->depth) ? 1 : 0)
 
-#ifdef USE_MUTEX
-#define lock(pf)                            \
-do {                                        \
-    if ((pf)->threadsafe)                   \
-    {                                       \
-        RTOS_MUTEX_GET((pf)->lock);         \
-    }                                       \
-} while (0)
+#ifdef CONFIG_SWFIFO_LOCKING
+/******************************************************************************
+    lock
+*//**
+    @brief Takes the fifo lock if the fifo was created threadsafe.
 
-#define unlock(pf)                          \
-do {                                        \
-    if ((pf)->threadsafe)                   \
-    {                                       \
-        RTOS_MUTEX_PUT((pf)->lock);         \
-    }                                       \
-} while (0)
+    A spinlock is used rather than a mutex because a fifo may be written from an
+    ISR and read from a thread. Mutexes are illegal in an ISR, and skipping the
+    mutex when in an ISR would provide no exclusion at all - nothing can block an
+    ISR, so a thread holding a mutex does not stop one. On a uniprocessor the
+    spinlock reduces to masking interrupts, which is what that case requires.
+
+    @param[in] fifo  Pointer to fifo object.
+    @return Returns the key to pass to unlock().
+******************************************************************************/
+static inline k_spinlock_key_t
+lock(SwFifo *fifo)
+{
+    k_spinlock_key_t key = {0};
+
+    if (fifo->threadsafe)
+    {
+        key = k_spin_lock(&fifo->lock);
+    }
+    return key;
+}
+
+/******************************************************************************
+    unlock
+*//**
+    @brief Releases the fifo lock if the fifo was created threadsafe.
+    @param[in] fifo  Pointer to fifo object.
+    @param[in] key  Key returned by the matching lock() call.
+******************************************************************************/
+static inline void
+unlock(SwFifo *fifo, k_spinlock_key_t key)
+{
+    if (fifo->threadsafe)
+    {
+        k_spin_unlock(&fifo->lock, key);
+    }
+}
+
 #else
-#define lock(pf)
-#define unlock(pf)
+/*  Locking compiled out. k_spinlock_key_t is still defined by kernel.h, so the
+    call sites need no conditionals. */
+static inline k_spinlock_key_t
+lock(SwFifo *fifo)
+{
+    k_spinlock_key_t key = {0};
+
+    (void)fifo;
+    return key;
+}
+
+static inline void
+unlock(SwFifo *fifo, k_spinlock_key_t key)
+{
+    (void)fifo;
+    (void)key;
+}
 #endif
 
 #define LOCAL_MIN(a, b)   (((a)<(b)) ? (a) : (b))
@@ -138,10 +180,11 @@ circRead(SwFifo *fifo, void *data, uint32_t num)
 void
 SwFifo_flush(SwFifo *fifo)
 {
-    lock(fifo);
+    k_spinlock_key_t key = lock(fifo);
+
     fifo->wrIdx = 0;
     fifo->rdIdx = 0;
-    unlock(fifo);
+    unlock(fifo, key);
 }
 
 /******************************************************************************
@@ -154,10 +197,10 @@ SwFifo_flush(SwFifo *fifo)
 bool
 SwFifo_isEmpty(SwFifo *fifo)
 {
-    int empty;
-    lock(fifo);
-    empty = isEmpty(fifo);
-    unlock(fifo);
+    k_spinlock_key_t key = lock(fifo);
+    int empty = isEmpty(fifo);
+
+    unlock(fifo, key);
     return (empty) ? true : false;
 }
 
@@ -171,10 +214,10 @@ SwFifo_isEmpty(SwFifo *fifo)
 bool
 SwFifo_isFull(SwFifo *fifo)
 {
-    int full;
-    lock(fifo);
-    full = isFull(fifo);
-    unlock(fifo);
+    k_spinlock_key_t key = lock(fifo);
+    int full = isFull(fifo);
+
+    unlock(fifo, key);
     return (full) ? true : false;
 }
 
@@ -196,12 +239,12 @@ SwFifo_write(SwFifo *fifo, void *items, uint32_t num)
         (unsigned int)fifo->wrIdx,
         (unsigned int)fifo->rdIdx);
 
-    lock(fifo);
+    k_spinlock_key_t key = lock(fifo);
 
     if (avail(fifo) < num)
     {
         /* Not enough space in fifo for requested write. */
-        unlock(fifo);
+        unlock(fifo, key);
         return -1;
     }
 
@@ -211,7 +254,7 @@ SwFifo_write(SwFifo *fifo, void *items, uint32_t num)
     /* Advance the write index, checking for wrap. */
     inc_wrIdx(fifo, num);
 
-    unlock(fifo);
+    unlock(fifo, key);
 
     LOG_DBG("%s: write exit: avail=%u; wrIdx=%u; rdIdx=%u",
         fifo->name,
@@ -235,19 +278,21 @@ SwFifo_write(SwFifo *fifo, void *items, uint32_t num)
 uint32_t
 SwFifo_peek(SwFifo *fifo, void *dst, uint32_t num)
 {
+    k_spinlock_key_t key = lock(fifo);
+    /* The count must be sampled under the lock: a concurrent writer can change
+       it between the sample and the read. */
     uint32_t numToRead = LOCAL_MIN(num, count(fifo));
 
-    lock(fifo);
-    if (isEmpty(fifo))
+    if (numToRead == 0)
     {
-        unlock(fifo);
+        unlock(fifo, key);
         return 0;
-    } 
+    }
 
     /* Read from circular memory. */
     circRead(fifo, dst, numToRead);
 
-    unlock(fifo);
+    unlock(fifo, key);
     return numToRead;
 }
 
@@ -262,9 +307,10 @@ SwFifo_peek(SwFifo *fifo, void *dst, uint32_t num)
 void
 SwFifo_ack(SwFifo *fifo, uint32_t num)
 {
-    lock(fifo);
+    k_spinlock_key_t key = lock(fifo);
+
     inc_rdIdx(fifo, num);
-    unlock(fifo);
+    unlock(fifo, key);
 }
 
 /******************************************************************************
@@ -286,11 +332,19 @@ SwFifo_read(SwFifo *fifo, void *dst, uint32_t num)
         (unsigned int)fifo->wrIdx,
         (unsigned int)fifo->rdIdx);
 
-    uint32_t numRead = SwFifo_peek(fifo, dst, num);
+    /*  Deliberately not implemented as SwFifo_peek() followed by SwFifo_ack().
+        Those take the lock separately, which would leave the read non-atomic:
+        a second reader could peek the same items before this one acks them.
+        Spinlocks are not recursive, so the lock is taken once here instead. */
+    k_spinlock_key_t key = lock(fifo);
+    uint32_t numRead = LOCAL_MIN(num, count(fifo));
+
     if (numRead)
     {
-        SwFifo_ack(fifo, numRead);
+        circRead(fifo, dst, numRead);
+        inc_rdIdx(fifo, numRead);
     }
+    unlock(fifo, key);
 
     LOG_DBG("%s: read exit: avail=%u; wrIdx=%u; rdIdx=%u",
         fifo->name,
@@ -310,9 +364,10 @@ SwFifo_read(SwFifo *fifo, void *dst, uint32_t num)
 uint32_t
 SwFifo_getCount(SwFifo *fifo)
 {
-    lock(fifo);
+    k_spinlock_key_t key = lock(fifo);
     uint32_t n = count(fifo);
-    unlock(fifo);
+
+    unlock(fifo, key);
     return n;
 }
 
@@ -325,9 +380,10 @@ SwFifo_getCount(SwFifo *fifo)
 uint32_t
 SwFifo_getAvail(SwFifo *fifo)
 {
-    lock(fifo);
+    k_spinlock_key_t key = lock(fifo);
     uint32_t n = avail(fifo);
-    unlock(fifo);
+
+    unlock(fifo, key);
     return n;
 }
 
@@ -361,7 +417,11 @@ SwFifo_init(
     fifo->depth    = depth;
     fifo->itemSize = itemSize;
     fifo->threadsafe = threadsafe;
-    //fifo->lock = NULL;
+
+#ifndef CONFIG_SWFIFO_LOCKING
+    CHECK_COND_RETURN_MSG(threadsafe, -ENOTSUP,
+        "Threadsafe fifo requested but CONFIG_SWFIFO_LOCKING is not enabled");
+#endif
 
     /* Init the index pointers, */
     fifo->wrIdx = 0;
@@ -381,11 +441,13 @@ SwFifo_init(
         CHECK_COND_RETURN_MSG(!fifo->mem, -ENOMEM, "Could not allocate fifo memory");
     }
 
-    if (fifo->threadsafe)
-    {
-        //fifo->lock = RTOS_MUTEX_CREATE();
-        //CHECK_COND_RETURN_MSG(!fifo->lock, -1, "Could not create mutex");
-    }
+#ifdef CONFIG_SWFIFO_LOCKING
+    /*  Zero the lock rather than assume the caller's storage is zeroed - a
+        SwFifo may be embedded in a stack or heap object. On a uniprocessor
+        without spinlock validation k_spinlock is an empty struct, so this
+        compiles to nothing. */
+    memset(&fifo->lock, 0, sizeof(fifo->lock));
+#endif
 
     return 0;
 }

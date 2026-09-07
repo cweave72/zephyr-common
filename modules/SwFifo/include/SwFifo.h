@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-//#include "RtosUtils.h"
+#include <zephyr/kernel.h>
 
 /** @brief Software fifo object.
 */
@@ -26,8 +26,13 @@ typedef struct SwFifo
     uint32_t rdIdx;
     /** @brief flag indicating fifo should be threadsafe. */
     bool threadsafe;
-    /** @brief Lock mutex */
-    //RTOS_MUTEX lock;
+#ifdef CONFIG_SWFIFO_LOCKING
+    /** @brief Lock guarding the indices and memory. A spinlock rather than a
+        mutex so that it may be taken from an ISR: a fifo written from an ISR and
+        read from a thread cannot be protected by a mutex, since nothing can
+        block an ISR. Only used when threadsafe is set. */
+    struct k_spinlock lock;
+#endif
     /** @brief Memory for the fifo (allocated on init). */
     uint8_t *mem;
 } SwFifo;
@@ -147,8 +152,12 @@ SwFifo_getAvail(SwFifo *fifo);
     allocate.
     @param[in] memSize  Size of the allocated mem for validation (N/A if mem is
     NULL)
-    @param[in] threadsafe  Set flag if fifo must be threadsafe.
-    @return Returns 0 on success, -1 on error (out of memory)
+    @param[in] threadsafe  Set if the fifo is accessed from more than one
+    context - two threads, or an ISR and a thread. Each access then takes a
+    spinlock. Requires CONFIG_SWFIFO_LOCKING.
+    @return Returns 0 on success, negative errno on error (-EINVAL on a bad
+    static memory size, -ENOMEM if allocation failed, -ENOTSUP if threadsafe was
+    requested without CONFIG_SWFIFO_LOCKING).
 ******************************************************************************/
 int
 SwFifo_init(
