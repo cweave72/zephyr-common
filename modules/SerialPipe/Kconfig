@@ -1,0 +1,43 @@
+config SERIALPIPE
+	bool "Enable the SerialPipe lib"
+	default n
+	select UART_PIPE
+	depends on SWFIFO
+	help
+	  Byte pipe over the chosen zephyr,uart-pipe UART. Owns the uart-pipe
+	  receive callback and presents inbound and outbound fifos. Performs no
+	  framing - that belongs to the layer above.
+
+config SERIALPIPE_RX_BUF_SIZE
+	int "Size of the buffer registered with uart_pipe_register()."
+	default 64
+	depends on SERIALPIPE
+
+config SERIALPIPE_RX_FIFO_DEPTH
+	int "Bytes of receive buffering."
+	default 1024
+	depends on SERIALPIPE
+
+config SERIALPIPE_TX_ITEM_SIZE
+	int "Max bytes accepted by a single SerialPipe_send() call."
+	default 256
+	depends on SERIALPIPE
+
+config SERIALPIPE_TX_DEPTH
+	int "Number of items in the transmit slab."
+	default 8
+	depends on SERIALPIPE
+
+config SERIALPIPE_TX_STACK_SIZE
+	int "Stack size for the SerialPipe transmit thread."
+	default 1024
+	depends on SERIALPIPE
+
+config SERIALPIPE_TX_THREAD_PRIO
+	int "Priority for the SerialPipe transmit thread."
+	default 8
+	depends on SERIALPIPE
+
+module = SERIALPIPE
+module-str = "SerialPipe"
+source "subsys/logging/Kconfig.template.log_config"
