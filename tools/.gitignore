@@ -1,6 +1,0 @@
-.venv/
-*.log
-*.egg-info/
-**/__pycache__
-**/lib
-
