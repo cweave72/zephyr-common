@@ -42,26 +42,42 @@ describes that mechanism.
 ## A Zephyr module
 
 `zephyr/module.yml` declares this repository as a Zephyr module. Thus Zephyr
-reads the code here during a build:
+reads the code here during a build.
 
-| Setting        | Result                                                                                                                                      |
-|----------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| `cmake: .`     | Zephyr processes `CMakeLists.txt`, which adds `modules` and `drivers`.                                                                      |
-| `kconfig`      | Zephyr reads `zephyr/Kconfig`, which sources `modules/Kconfig` and `drivers/Kconfig`. `modules/Kconfig` sources the Kconfig of each module. |
-| `board_root`   | Zephyr finds the boards in `boards`.                                                                                                        |
-| `dts_root`     | Zephyr finds the device tree files here.                                                                                                    |
-| `snippet_root` | Zephyr finds the snippets in `snippets`.                                                                                                    |
+`zephyr/module.yml`
+```yaml
+build:
+  cmake: .
+  kconfig: zephyr/Kconfig
+  settings:
+    board_root: .
+    dts_root: .
+    snippet_root: .
+```
+
+| Setting        | Result                                   |
+|----------------|------------------------------------------|
+| `cmake`        | Zephyr reads `CMakeLists.txt`.           |
+| `kconfig`      | Zephyr reads `zephyr/Kconfig`.           |
+| `board_root`   | Zephyr finds the boards in `boards`.     |
+| `dts_root`     | Zephyr finds the device tree files here. |
+| `snippet_root` | Zephyr finds the snippets in `snippets`. |
+
+`CMakeLists.txt` adds `modules` and `drivers`. `zephyr/Kconfig` sources
+`modules/Kconfig` and `drivers/Kconfig`, and `modules/Kconfig` sources the
+Kconfig of each module.
 
 An application needs no path to this repository. The workspace manifest
 supplies it, and west registers the module.
 
 ## Modules
 
-Each directory in `modules` is one module. A module supplies one or more
-Kconfig symbols. An application enables a module through its
-`conf/modules.conf` file.
+Each directory in `modules` provides a standalone module for use in an
+application. A module supplies one or more Kconfig symbols. Each module's
+Kconfig specifies any other dependencies. An application
+enables a module through an app-level `.conf` file.
 
-A module has this layout. The `System` module is the example:
+A module has this layout. See the `System` module as an example:
 
 ```
 System/
@@ -76,11 +92,53 @@ System/
     └── SystemRpc.c
 ```
 
-`modules/Kconfig` must source the Kconfig file of a new module. Zephyr does not
-find a module that `modules/Kconfig` does not source.
+### The CMakeLists.txt of a module
 
-To add a module, use the `add-zephyr-module` procedure, or copy the layout of
-an existing module.
+A guard on the Kconfig symbol of the module wraps the whole file. Thus the
+module adds nothing to the build when the application does not enable it.
+
+```cmake
+if (CONFIG_SYSTEM)
+
+    zephyr_include_directories(include)
+    zephyr_library_sources("src/System.c")
+    zephyr_library_sources_ifdef(CONFIG_SYSTEMRPC "src/SystemRpc.c")
+
+endif()
+```
+
+| Command                          | Task                            |
+|----------------------------------|---------------------------------|
+| `if (CONFIG_<SYMBOL>)`           | Builds nothing when unset.      |
+| `zephyr_include_directories()`   | Adds the public header path.    |
+| `zephyr_library_sources()`       | Adds the sources of the module. |
+| `zephyr_library_sources_ifdef()` | Adds a source conditionally.    |
+
+`System` uses the `_ifdef` form to add its RPC surface only when
+`CONFIG_SYSTEMRPC` is set.
+
+A module with more than one or two sources can collect them first:
+
+```cmake
+if (CONFIG_COBS)
+    set(srcs "src/Cobs.c"
+             "src/Cobs_frame.c"
+             )
+
+    zephyr_include_directories(include)
+    zephyr_library_sources(${srcs})
+endif()
+```
+
+### How to register a module
+
+Two files register a module. Zephyr does not find a module that both files do
+not name:
+
+| File                     | Entry                      |
+|--------------------------|----------------------------|
+| `modules/Kconfig`        | `rsource "<Name>/Kconfig"` |
+| `modules/CMakeLists.txt` | `add_subdirectory(<Name>)` |
 
 ### RPC modules
 
@@ -89,12 +147,12 @@ holds the library, and `SystemRpc.c` holds the RPC surface.
 
 A callset needs these parts:
 
-| Part                          | Location                                                  |
-|-------------------------------|-----------------------------------------------------------|
-| The message definitions       | `<Name>.proto` in the `proto` repository                  |
-| The C messages                | nanopb generates them during the build                    |
-| The handlers and the resolver | `src/<Name>Rpc.c` in the module                           |
-| The Python bindings           | `proto_builder` generates them in the `python` repository |
+| Part                  | Location                            |
+|-----------------------|-------------------------------------|
+| Message definitions   | `<Name>.proto` in the `proto` repo  |
+| C messages            | nanopb generates them at build time |
+| Handlers and resolver | `src/<Name>Rpc.c` in the module     |
+| Python bindings       | `proto_builder` generates them      |
 
 The resolver maps a call to its handler. The `ProtoRpc` module supplies the
 dispatcher that calls the resolver.
@@ -128,13 +186,18 @@ cluster needs the cluster name, and Zephyr rejects a name without it.
 `common.mk` at the workspace root includes these files. An application gets
 them through its own `Makefile`.
 
-| Script                              | Task                                                                     |
-|-------------------------------------|--------------------------------------------------------------------------|
-| `scripts/cmake/build_proto.cmake`   | Generates the nanopb C bindings. Accepts one or more proto search paths. |
-| `scripts/cmake/app_net_type.cmake`  | Selects and verifies the networking fragment.                            |
-| `scripts/make/protorpc.mk`          | Builds the Python bindings for the protos.                               |
-| `scripts/make/protorpc_handlers.mk` | Generates the C RPC handler source.                                      |
-| `scripts/make/utils.mk`             | Shared make functions.                                                   |
+Paths below are relative to `scripts`.
+
+| Script                      | Task                             |
+|-----------------------------|----------------------------------|
+| `cmake/build_proto.cmake`   | Generates the nanopb C bindings. |
+| `cmake/app_net_type.cmake`  | Selects the networking fragment. |
+| `make/protorpc.mk`          | Builds the Python bindings.      |
+| `make/protorpc_handlers.mk` | Generates the C RPC handlers.    |
+| `make/utils.mk`             | Shared make functions.           |
+
+`build_proto.cmake` accepts one or more proto search paths.
+`app_net_type.cmake` also verifies the fragment against the merged Kconfig.
 
 ## Application template
 
