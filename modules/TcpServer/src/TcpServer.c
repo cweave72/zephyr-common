@@ -3,6 +3,7 @@
  *  
  *  @brief: Library implementing a tcp server.
 *******************************************************************************/
+#include <errno.h>
 #include <string.h>
 #include <zephyr/logging/log.h>
 
@@ -78,19 +79,45 @@ tcp_server_task(void *p, void *arg1, void *arg2)
 
             if (!read_done)
             {
-                num_read = TcpSocket_read(sock, server->data, server->data_len);
-                if (num_read < 0)
+                int ready = 1;
+
+                if (server->poll_timeout_ms > 0)
                 {
-                    LOG_ERR("Closing socket due to read error.");
-                    break;
+                    struct zsock_pollfd pfd = {
+                        .fd = sock,
+                        .events = ZSOCK_POLLIN,
+                    };
+
+                    ready = zsock_poll(&pfd, 1, server->poll_timeout_ms);
+                    if (ready < 0)
+                    {
+                        LOG_ERR("Closing socket due to poll error: errno %d",
+                            errno);
+                        break;
+                    }
+                    /*  POLLHUP and POLLERR also count as ready. recv()
+                        reports them as 0 or -1 below. */
                 }
-                else if (num_read == 0)
+
+                if (ready > 0)
                 {
-                    /*  Set flag to prevent further reading, but let the callback
-                        continue to send data until it's finished.
-                    */
-                    read_done = 1;
+                    num_read = TcpSocket_read(sock, server->data,
+                        server->data_len);
+                    if (num_read < 0)
+                    {
+                        LOG_ERR("Closing socket due to read error.");
+                        break;
+                    }
+                    else if (num_read == 0)
+                    {
+                        /*  Set flag to prevent further reading, but let the
+                            callback continue to send data until it's
+                            finished.
+                        */
+                        read_done = 1;
+                    }
                 }
+                /*  ready == 0: poll timeout. The callback runs with len 0. */
             }
             else
             {
@@ -128,6 +155,28 @@ cleanup:
 }
 
 /******************************************************************************
+    [docimport TcpServer_setPollTimeout]
+*//**
+    @brief Sets the receive poll timeout.
+
+    Call after TcpServer_init() and before the first client connects. The
+    server task reads the value on every loop iteration.
+
+    @param[in] server  Pointer to initialized TcpServer object.
+    @param[in] timeout_ms  Timeout in ms. 0 restores blocking reads.
+    @return Returns 0 on success, -EINVAL on a bad argument.
+******************************************************************************/
+int
+TcpServer_setPollTimeout(TcpServer *server, int timeout_ms)
+{
+    CHECK_COND_RETURN_MSG(!server || (timeout_ms < 0), -EINVAL,
+        "Bad argument.");
+
+    server->poll_timeout_ms = timeout_ms;
+    return 0;
+}
+
+/******************************************************************************
     [docimport TcpServer_init]
 *//**
     @brief Initializes a TCP server.
@@ -159,10 +208,12 @@ TcpServer_init(
 
     CHECK_COND_RETURN_MSG(!cb, -1, "A callback must be provided.");
     server->cb = cb;
+    server->poll_timeout_ms = 0;
 
     task->stackSize = task_stackSize;
     task->prio = task_prio;
     strncpy(task->name, task_name, sizeof(task->name));
+    task->name[sizeof(task->name) - 1] = '\0';
 
     if (buf)
     {

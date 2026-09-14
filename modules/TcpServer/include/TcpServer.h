@@ -18,7 +18,9 @@
     @param[in] server  Pointer to the server object.
     @param[in] sock  The active connected socket.
     @param[in] data  Pointer to buffer holding received data.
-    @param[in] len  Length of received data.
+    @param[in] len  Length of received data. 0 after the peer closes its
+    side, and also on every receive poll timeout when one is set with
+    TcpServer_setPollTimeout(). Use those calls to send unsolicited data.
     @param[out] finished  Status:
     0 --> not finished, keep connection active
     1 --> finished, close connection.
@@ -64,7 +66,27 @@ typedef struct TcpServer
     /** @brief Tcp task object. */
     TcpTask task;
 
+    /** @brief Receive poll timeout in ms. 0 blocks in read (default). When
+        greater than 0 the callback also runs with len = 0 each time the
+        timeout elapses. */
+    int poll_timeout_ms;
+
 } TcpServer;
+
+/******************************************************************************
+    [docexport TcpServer_setPollTimeout]
+*//**
+    @brief Sets the receive poll timeout.
+
+    Call after TcpServer_init() and before the first client connects. The
+    server task reads the value on every loop iteration.
+
+    @param[in] server  Pointer to initialized TcpServer object.
+    @param[in] timeout_ms  Timeout in ms. 0 restores blocking reads.
+    @return Returns 0 on success, -EINVAL on a bad argument.
+******************************************************************************/
+int
+TcpServer_setPollTimeout(TcpServer *server, int timeout_ms);
 
 
 /******************************************************************************
