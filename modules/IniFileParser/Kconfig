@@ -1,0 +1,22 @@
+config INIFILEPARSER
+	bool "Enable the IniFileParser lib"
+	default n
+	depends on FSAPI
+	help
+	  Read-only parser for INI-style configuration files on a FsApi mount,
+	  for example /flash/etc/config/net.conf.
+
+if INIFILEPARSER
+
+config INIFILEPARSER_MAX_LINE
+	int "Longest line, including the NUL"
+	default 128
+	help
+	  Size of the line buffer, which is on the stack of the caller. A
+	  longer line makes IniFileParser_get return -E2BIG.
+
+endif # INIFILEPARSER
+
+module = INIFILEPARSER
+module-str = "IniFileParser"
+source "subsys/logging/Kconfig.template.log_config"

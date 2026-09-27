@@ -1,0 +1,5 @@
+tests:
+  inifileparser_tests.parse:
+    platform_allow:
+      - qemu_x86
+    tags: inifileparser
