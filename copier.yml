@@ -100,3 +100,11 @@ echoserver_transport:
   default: udp
   choices: [udp, tcp]
   when: "{{ 'EchoServer' in modules }}"
+
+# Size of the FsApi littlefs partition in KiB. app_gen writes the partition
+# into boards/<board>.overlay from this value (see boards.FS_LAYOUTS).
+fs_size_kb:
+  type: int
+  help: FsApi file system size in KiB (a multiple of the 4 KiB erase block)
+  default: 128
+  when: "{{ 'FsApi' in modules }}"

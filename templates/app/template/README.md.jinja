@@ -84,6 +84,32 @@ rtosutils-cli --ip <device-ip> ...
 
 Build the host-side protobuf bindings with `make proto`.
 {% endif %}
+{% if 'FsApi' in modules %}
+## File system
+
+`src/FsApi.c` mounts littlefs at `/lfs` through the `FsApi` module
+(`common/modules/FsApi/README.md`). The first mount formats the partition.
+{%- if use_rpc %}
+`src/rpc.c` registers the `FsApiRpc` callset as id 2. `fsapi-cli` gives remote
+access (`python/fsapi/README.md`):
+
+```bash
+fsapi-cli --ip <device-ip> df
+fsapi-cli --ip <device-ip> tree /lfs
+```
+{%- endif %}
+
+`boards/<board>.overlay` holds the fs partition and the `fsapi_lfs` fstab
+node. The partition size is {{ fs_size_kb }} KiB. `APP_LFS_SIZE` in the overlay
+sets it. To change the size for one build, give the value in bytes:
+
+```bash
+make BOARD=<board> PRISTINE=y build CMAKE_OPTS="-DDTS_EXTRA_CPPFLAGS=-DAPP_LFS_SIZE=0x40000"
+```
+
+For a board without a known flash layout, the overlay holds a commented
+template. Fill it in, or the build stops with an FsApi error.
+{% endif %}
 {% if use_led %}
 ## LED
 

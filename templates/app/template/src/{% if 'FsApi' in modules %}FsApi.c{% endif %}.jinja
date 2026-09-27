@@ -1,0 +1,57 @@
+/*******************************************************************************
+ *  @file: FsApi.c
+ *
+ *  @brief: App-level init for the FsApi module.
+ *
+ *  app_FsApi_init() mounts the littlefs file system described by the fsapi_lfs
+ *  fstab node in boards/<board>.overlay, and logs its size. The file example
+ *  is inert behind #if 0. See common/modules/FsApi/README.md.
+*******************************************************************************/
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "FsApi.h"
+#include "app.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+int
+app_FsApi_init(void)
+{
+    struct fs_statvfs stat;
+    int ret;
+
+    ret = FsApi_init();
+    if (ret < 0)
+    {
+        LOG_ERR("FsApi_init failed: %d", ret);
+        return ret;
+    }
+
+    ret = FsApi_getInfo(&stat);
+    if (ret < 0)
+    {
+        LOG_ERR("FsApi_getInfo failed: %d", ret);
+        return ret;
+    }
+
+    LOG_INF("%s: %lu blocks of %lu B; %lu free.", FsApi_getMountPoint(),
+        stat.f_blocks, stat.f_frsize, stat.f_bfree);
+
+#if 0   /* TODO: enable and adapt. */
+    {
+        char path[64];
+        static const char msg[] = "boot\n";
+        ssize_t num;
+
+        snprintk(path, sizeof(path), "%s/boot.log", FsApi_getMountPoint());
+        num = FsApi_writeFile(path, 0, msg, sizeof(msg) - 1,
+            FS_O_CREATE | FS_O_APPEND);
+        if (num < 0)
+        {
+            LOG_ERR("Write of %s failed: %d", path, (int)num);
+        }
+    }
+#endif
+    return 0;
+}

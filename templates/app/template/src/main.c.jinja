@@ -21,6 +21,16 @@ main(void)
     /* Not fatal: a board without an led0 alias logs a warning and continues. */
     (void)app_led_init();
 {%- endif %}
+{%- if 'FsApi' in modules %}
+
+    /* Before the network, so the file system is mounted before a remote
+       client can reach it. Not fatal: the app runs without a file system. */
+    ret = app_FsApi_init();
+    if (ret < 0)
+    {
+        LOG_ERR("FsApi init failed: %d", ret);
+    }
+{%- endif %}
 
     ret = app_net_init();
     if (ret < 0)
@@ -35,7 +45,7 @@ main(void)
         LOG_ERR("RPC init failed: %d", ret);
         return 0;
     }
-{% for mod in modules if mod != 'TraceModule' %}
+{% for mod in modules if mod not in ['TraceModule', 'FsApi'] %}
     ret = app_{{ mod }}_init();
     if (ret < 0)
     {

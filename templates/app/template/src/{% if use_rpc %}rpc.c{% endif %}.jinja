@@ -16,6 +16,10 @@
 #include "SystemRpc.pb.h"
 #include "RtosUtilsRpc.h"
 #include "RtosUtilsRpc.pb.h"
+{%- if 'FsApi' in modules %}
+#include "FsApiRpc.h"
+#include "FsApiRpc.pb.h"
+{%- endif %}
 
 #include "app.h"
 
@@ -24,6 +28,9 @@ LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
 static ProtoRpc_Callset_Entry callsets[] = {
     PROTORPC_ADD_CALLSET(0, SystemRpc_resolver, system_Callset),
     PROTORPC_ADD_CALLSET(1, RtosUtilsRpc_resolver, rtosutils_Callset),
+{%- if 'FsApi' in modules %}
+    PROTORPC_ADD_CALLSET(2, FsApiRpc_resolver, fsapi_Callset),
+{%- endif %}
 };
 
 static TcpRpcServer tcp_rpc;

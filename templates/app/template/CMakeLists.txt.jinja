@@ -26,6 +26,9 @@ list(APPEND EXTRA_CONF_FILE
     ${CMAKE_CURRENT_SOURCE_DIR}/conf/tracing.conf
     ${CMAKE_CURRENT_SOURCE_DIR}/conf/tracemodule.conf
 {%- endif %}
+{%- if 'FsApi' in modules %}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conf/fs.conf
+{%- endif %}
 )
 {% if net_type != 'none' %}
 # Which networking fragment to apply. Declare the type with
