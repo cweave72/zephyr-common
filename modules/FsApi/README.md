@@ -202,6 +202,54 @@ ssize_t n = FsApi_readFile("/flash/count", 0, &count, sizeof(count));
 ret = FsApi_format("/ram");
 ```
 
+## Branding
+
+Branding writes files into a flash file system at build time, for example
+configuration files such as `/flash/etc/config/net.conf`. It is a separate
+step from a firmware flash.
+
+| Step                     | Tool                              | Output                                             |
+|--------------------------|-----------------------------------|----------------------------------------------------|
+| 1. Build the application | `make build` (FsApi CMake)        | `build/fsapi_layout.json`                          |
+| 2. Build the image       | `make brandimage` (`fsapi-brand`) | `build/brand/brand.bin`, `brand.hex`, `brand.json` |
+| 3. Flash the image       | `make brand` (steps 2 and 3)      | The fs partition on the device                     |
+
+**Layout.** The FsApi build runs `scripts/fsapi_layout.py`. The script reads
+the devicetree of the build (`edt.pickle`) and writes one entry for each
+enabled `zephyr,fstab,littlefs` node: the mount point, the partition offset
+and size, the flash base address, the erase block size and the littlefs
+sizes. The image thus always has the geometry of the firmware.
+
+**Image.** `fsapi-brand` (`python/fsapi`) builds a littlefs image of the whole
+partition from a directory. The directory maps to the mount root:
+`brand/default/etc/config/net.conf` becomes `/flash/etc/config/net.conf`. Dot
+files are skipped. The tool writes littlefs on-disk format 2.1, the format of
+the device littlefs (v2.9). After it writes the image, the tool mounts the
+image again and compares each file.
+
+**Flash.** `make brand` flashes only the fs partition. The image replaces the
+whole partition, so the runtime files of that mount are lost. `make flash`
+never touches the partition, so a firmware update keeps the branded files.
+
+```bash
+make brand                              # BRAND defaults to brand/default
+make brand BRAND=~/secrets/site-a       # a directory outside git
+make brand BRAND_MOUNT=/flash           # when the build has more flash mounts
+```
+
+`BRAND_FLASH_ARGS` holds the `west flash` arguments which write only the
+image. The default, `--hex-file build/brand/brand.hex`, suits a runner which
+flashes a hex file (openocd on the w55rp20). The hex holds only the partition
+address range. An esp32 board (esptool) sets this in its `board.mk`:
+
+```make
+BRAND_FLASH_ARGS = --bin-file build/brand/brand.bin \
+                   --esp-app-address $$(cat build/brand/partition_offset)
+```
+
+The esp32s3 boards have no flash fs partition yet. See the FsApi layouts in
+`python/app_generator/README.md`.
+
 ## Remote access (FsApiRpc)
 
 The callset is defined in `proto/FsApiRpc/FsApiRpc.proto` (package `fsapi`,
