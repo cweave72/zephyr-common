@@ -6,10 +6,18 @@ config FSAPI
 	depends on FILE_SYSTEM_MKFS
 	help
 	  Handle-based file system API over the Zephyr VFS and littlefs.
-	  Mounts the zephyr,fstab,littlefs node with the nodelabel fsapi_lfs.
-	  FILE_SYSTEM_MKFS provides fs_mkfs for FsApi_format.
+	  FsApi_init mounts every enabled zephyr,fstab,littlefs node.
+	  FsApi_addMount adds any other mount, for example littlefs on a RAM
+	  disk. FILE_SYSTEM_MKFS provides fs_mkfs for FsApi_format.
 
 if FSAPI
+
+config FSAPI_MAX_MOUNTS
+	int "Maximum number of mounts"
+	default 2
+	help
+	  Size of the mount table: the fstab nodes plus the FsApi_addMount
+	  mounts.
 
 config FSAPI_MAX_OPEN_FILES
 	int "Maximum number of open file handles"

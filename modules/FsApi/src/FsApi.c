@@ -3,8 +3,13 @@
  *
  *  @brief: Handle-based file system API over the Zephyr VFS and littlefs.
  *
- *  A mutex guards the handle pools. Each handle operation holds the mutex, so
- *  a concurrent close cannot release a handle while another thread uses it.
+ *  FsApi manages a table of mounts. FsApi_init registers and mounts every
+ *  enabled zephyr,fstab,littlefs node. FsApi_addMount registers any other
+ *  mount, for example littlefs on a RAM disk or FAT.
+ *
+ *  A mutex guards the handle pools and the mount table. Each handle operation
+ *  holds the mutex, so a concurrent close cannot release a handle while
+ *  another thread uses it.
 *******************************************************************************/
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -16,18 +21,42 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(FsApi, CONFIG_FSAPI_LOG_LEVEL);
 
-/** @brief The fstab node which describes the file system. */
-#define FSAPI_NODE      DT_NODELABEL(fsapi_lfs)
+#define FSTAB_COMPAT    zephyr_fstab_littlefs
 
-BUILD_ASSERT(DT_NODE_EXISTS(FSAPI_NODE),
-    "FsApi needs a zephyr,fstab,littlefs node with the nodelabel fsapi_lfs.");
+#if DT_HAS_COMPAT_STATUS_OKAY(FSTAB_COMPAT)
 
-/** @brief The partition which the fstab node references. */
-#define FSAPI_PART_NODE     DT_PHANDLE(FSAPI_NODE, partition)
+/* The littlefs fstab entry always uses a flash partition. */
+#define PART_NODE(node)     DT_PHANDLE(node, partition)
 
-BUILD_ASSERT((DT_REG_SIZE(FSAPI_PART_NODE) %
-    DT_PROP_OR(DT_GPARENT(FSAPI_PART_NODE), erase_block_size, 4096)) == 0,
-    "The fsapi_lfs partition size must be a multiple of the erase block size.");
+/* littlefs allocates each open file cache (cache-size bytes) from a heap. With
+   CONFIG_FS_LITTLEFS_FC_HEAP_SIZE <= 0, Zephyr sizes that heap for
+   CONFIG_FS_LITTLEFS_NUM_FILES caches of CONFIG_FS_LITTLEFS_CACHE_SIZE bytes. A
+   larger cache-size in a fstab node makes a later open fail with -ENOMEM. */
+#define CHECK_FSTAB_NODE(node)                                                  \
+    BUILD_ASSERT((DT_REG_SIZE(PART_NODE(node)) %                                \
+        DT_PROP_OR(DT_GPARENT(PART_NODE(node)), erase_block_size, 4096)) == 0,  \
+        "The partition size of " DT_PROP(node, mount_point)                     \
+        " must be a multiple of the erase block size.");                        \
+    BUILD_ASSERT((CONFIG_FS_LITTLEFS_FC_HEAP_SIZE > 0) ||                       \
+        (DT_PROP(node, cache_size) <= CONFIG_FS_LITTLEFS_CACHE_SIZE),           \
+        "CONFIG_FS_LITTLEFS_CACHE_SIZE must be >= the cache-size of "           \
+        DT_PROP(node, mount_point) ", or set CONFIG_FS_LITTLEFS_FC_HEAP_SIZE.");
+
+DT_FOREACH_STATUS_OKAY(FSTAB_COMPAT, CHECK_FSTAB_NODE)
+
+#define DECLARE_FSTAB_ENTRY(node)   FS_FSTAB_DECLARE_ENTRY(node);
+DT_FOREACH_STATUS_OKAY(FSTAB_COMPAT, DECLARE_FSTAB_ENTRY)
+
+/** @brief The fstab mounts, which FsApi_init registers. */
+#define FSTAB_ENTRY_REF(node)       &FS_FSTAB_ENTRY(node),
+static struct fs_mount_t *const fstab_mounts[] = {
+    DT_FOREACH_STATUS_OKAY(FSTAB_COMPAT, FSTAB_ENTRY_REF)
+};
+
+BUILD_ASSERT(ARRAY_SIZE(fstab_mounts) <= CONFIG_FSAPI_MAX_MOUNTS,
+    "CONFIG_FSAPI_MAX_MOUNTS is smaller than the number of fstab nodes.");
+
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(FSTAB_COMPAT) */
 
 BUILD_ASSERT(CONFIG_FSAPI_MAX_OPEN_FILES <= CONFIG_FS_LITTLEFS_NUM_FILES,
     "CONFIG_FS_LITTLEFS_NUM_FILES must be >= CONFIG_FSAPI_MAX_OPEN_FILES.");
@@ -36,18 +65,18 @@ BUILD_ASSERT(CONFIG_FSAPI_MAX_OPEN_DIRS < CONFIG_FS_LITTLEFS_NUM_DIRS,
     "CONFIG_FS_LITTLEFS_NUM_DIRS must be > CONFIG_FSAPI_MAX_OPEN_DIRS. "
     "FsApi_listDir uses one more directory.");
 
-/* littlefs allocates each open file cache (cache-size bytes) from a heap. With
-   CONFIG_FS_LITTLEFS_FC_HEAP_SIZE <= 0, Zephyr sizes that heap for
-   CONFIG_FS_LITTLEFS_NUM_FILES caches of CONFIG_FS_LITTLEFS_CACHE_SIZE bytes. A
-   larger cache-size in the fstab node makes a later open fail with -ENOMEM. */
-BUILD_ASSERT((CONFIG_FS_LITTLEFS_FC_HEAP_SIZE > 0) ||
-    (DT_PROP(FSAPI_NODE, cache_size) <= CONFIG_FS_LITTLEFS_CACHE_SIZE),
-    "CONFIG_FS_LITTLEFS_CACHE_SIZE must be >= the fsapi_lfs cache-size, or set "
-    "CONFIG_FS_LITTLEFS_FC_HEAP_SIZE.");
+/** @brief One registered mount. */
+typedef struct FsApi_Mount
+{
+    /** @brief The Zephyr mount descriptor. */
+    struct fs_mount_t *mp;
+    /** @brief True while the file system is mounted. */
+    bool mounted;
+} FsApi_Mount;
 
-FS_FSTAB_DECLARE_ENTRY(FSAPI_NODE);
-
-static struct fs_mount_t *mountpoint = &FS_FSTAB_ENTRY(FSAPI_NODE);
+/** @brief The mount table. The pool mutex guards it. */
+static FsApi_Mount mounts[CONFIG_FSAPI_MAX_MOUNTS];
+static int num_mounts;
 
 /** @brief The file handle pool. */
 static struct fs_file_t files[FSAPI_MAX_OPEN_FILES];
@@ -56,9 +85,6 @@ static bool files_inuse[FSAPI_MAX_OPEN_FILES];
 /** @brief The directory handle pool. */
 static struct fs_dir_t dirs[FSAPI_MAX_OPEN_DIRS];
 static bool dirs_inuse[FSAPI_MAX_OPEN_DIRS];
-
-/** @brief True while the file system is mounted. The pool mutex guards it. */
-static bool mounted;
 
 static K_MUTEX_DEFINE(pool_mtx);
 
@@ -89,29 +115,168 @@ clear_dir_size(struct fs_dirent *entry)
 }
 
 /******************************************************************************
+    find_mount
+*//**
+    @brief Returns the index of the mount with the given mount point, or -1.
+    Call with the lock held.
+******************************************************************************/
+static int
+find_mount(const char *mnt_point)
+{
+    int k;
+
+    for (k = 0; k < num_mounts; k++)
+    {
+        if (strcmp(mounts[k].mp->mnt_point, mnt_point) == 0)
+        {
+            return k;
+        }
+    }
+    return -1;
+}
+
+/******************************************************************************
+    mount_one
+*//**
+    @brief Mounts one table entry. Call with the lock held.
+******************************************************************************/
+static int
+mount_one(FsApi_Mount *m)
+{
+    int ret;
+
+    ret = fs_mount(m->mp);
+    if (ret == -EBUSY)
+    {
+        /* The fstab node sets automount, so the fs is already mounted. */
+        LOG_INF("%s is already mounted.", m->mp->mnt_point);
+        ret = 0;
+    }
+    m->mounted = (ret == 0);
+
+    if (ret < 0)
+    {
+        LOG_ERR("Mount of %s failed: %d", m->mp->mnt_point, ret);
+        return ret;
+    }
+
+    LOG_INF("Mounted %s.", m->mp->mnt_point);
+    return 0;
+}
+
+/******************************************************************************
+    close_handles
+*//**
+    @brief Closes the open handles on one mount, or on all mounts if mp is
+    NULL. Call with the lock held.
+    @return The number of handles closed.
+******************************************************************************/
+static int
+close_handles(const struct fs_mount_t *mp)
+{
+    int num = 0;
+    int k;
+
+    for (k = 0; k < FSAPI_MAX_OPEN_FILES; k++)
+    {
+        if (files_inuse[k] && ((mp == NULL) || (files[k].mp == mp)))
+        {
+            (void)fs_close(&files[k]);
+            files_inuse[k] = false;
+            num++;
+        }
+    }
+    for (k = 0; k < FSAPI_MAX_OPEN_DIRS; k++)
+    {
+        if (dirs_inuse[k] && ((mp == NULL) || (dirs[k].mp == mp)))
+        {
+            (void)fs_closedir(&dirs[k]);
+            dirs_inuse[k] = false;
+            num++;
+        }
+    }
+    return num;
+}
+
+/******************************************************************************
+    [docimport FsApi_addMount]
+*//**
+    @brief Registers a mount and mounts it. Use it for a file system which no
+    fstab node describes, for example littlefs on a RAM disk. Call it after
+    FsApi_init. The mount descriptor must stay valid while FsApi runs.
+    @param[in] mp  The Zephyr mount descriptor.
+    @return 0 on success, negative errno on failure. -ENOMEM if the mount
+      table is full, -EEXIST if the mount point is already registered.
+******************************************************************************/
+int
+FsApi_addMount(struct fs_mount_t *mp)
+{
+    int ret;
+
+    CHECK_COND_RETURN((mp == NULL) || (mp->mnt_point == NULL), -EINVAL);
+
+    lock();
+    if (find_mount(mp->mnt_point) >= 0)
+    {
+        unlock();
+        LOG_ERR("%s is already registered.", mp->mnt_point);
+        return -EEXIST;
+    }
+    if (num_mounts == CONFIG_FSAPI_MAX_MOUNTS)
+    {
+        unlock();
+        LOG_ERR("No free mount entry for %s.", mp->mnt_point);
+        return -ENOMEM;
+    }
+
+    mounts[num_mounts].mp = mp;
+    ret = mount_one(&mounts[num_mounts]);
+    num_mounts++;
+    unlock();
+
+    return ret;
+}
+
+/******************************************************************************
+    [docimport FsApi_getMountCount]
+*//**
+    @brief Returns the number of registered mounts.
+******************************************************************************/
+int
+FsApi_getMountCount(void)
+{
+    return num_mounts;
+}
+
+/******************************************************************************
     [docimport FsApi_getMountPoint]
 *//**
-    @brief Returns the mount point of the file system, for example "/lfs".
+    @brief Returns the mount point of a registered mount, for example "/flash".
+    @param[in] idx  The mount index, 0 to FsApi_getMountCount() - 1.
+    @return The mount point, or NULL if idx is out of range.
 ******************************************************************************/
 const char *
-FsApi_getMountPoint(void)
+FsApi_getMountPoint(int idx)
 {
-    return mountpoint->mnt_point;
+    CHECK_COND_RETURN((idx < 0) || (idx >= num_mounts), NULL);
+
+    return mounts[idx].mp->mnt_point;
 }
 
 /******************************************************************************
     [docimport FsApi_getInfo]
 *//**
-    @brief Gets the volume statistics of the file system.
+    @brief Gets the volume statistics of the file system which holds a path.
+    @param[in] path  A mount point or any path on the file system.
     @param[out] stat  Pointer to the statistics output.
     @return 0 on success, negative errno on failure.
 ******************************************************************************/
 int
-FsApi_getInfo(struct fs_statvfs *stat)
+FsApi_getInfo(const char *path, struct fs_statvfs *stat)
 {
-    CHECK_COND_RETURN(stat == NULL, -EINVAL);
+    CHECK_COND_RETURN((path == NULL) || (stat == NULL), -EINVAL);
 
-    return fs_statvfs(mountpoint->mnt_point, stat);
+    return fs_statvfs(path, stat);
 }
 
 /******************************************************************************
@@ -200,28 +365,10 @@ FsApi_close(int fd)
 int
 FsApi_closeAll(void)
 {
-    int num = 0;
-    int k;
+    int num;
 
     lock();
-    for (k = 0; k < FSAPI_MAX_OPEN_FILES; k++)
-    {
-        if (files_inuse[k])
-        {
-            (void)fs_close(&files[k]);
-            files_inuse[k] = false;
-            num++;
-        }
-    }
-    for (k = 0; k < FSAPI_MAX_OPEN_DIRS; k++)
-    {
-        if (dirs_inuse[k])
-        {
-            (void)fs_closedir(&dirs[k]);
-            dirs_inuse[k] = false;
-            num++;
-        }
-    }
+    num = close_handles(NULL);
     unlock();
 
     LOG_DBG("Closed %d handles.", num);
@@ -672,60 +819,80 @@ FsApi_writeFile(const char *path, off_t offset, const void *buf, size_t size,
 /******************************************************************************
     [docimport FsApi_format]
 *//**
-    @brief Formats the file system and mounts it again. All data is lost.
-    Closes all open handles first. Works also when the mount failed, for
-    example on a corrupted file system.
-    @return 0 on success, negative errno on failure.
+    @brief Formats one file system and mounts it again. All its data is lost.
+    Closes the open handles on that file system first. Works also when the
+    mount failed, for example on a corrupted file system.
+    @param[in] mnt_point  The mount point, for example "/flash".
+    @return 0 on success, negative errno on failure. -ENOENT if no mount has
+      this mount point.
 ******************************************************************************/
 int
-FsApi_format(void)
+FsApi_format(const char *mnt_point)
 {
+    FsApi_Mount *m;
+    void *cfg;
+    int idx;
     int ret;
 
-    /* Hold the pool lock for the whole format, so no handle opens on the
-       old file system. k_mutex is recursive, thus FsApi_closeAll can lock. */
-    lock();
-    (void)FsApi_closeAll();
+    CHECK_COND_RETURN(mnt_point == NULL, -EINVAL);
 
-    if (mounted)
+    /* Hold the lock for the whole format, so no handle opens on the old file
+       system. */
+    lock();
+    idx = find_mount(mnt_point);
+    if (idx < 0)
     {
-        ret = fs_unmount(mountpoint);
+        unlock();
+        return -ENOENT;
+    }
+    m = &mounts[idx];
+
+    (void)close_handles(m->mp);
+
+    if (m->mounted)
+    {
+        ret = fs_unmount(m->mp);
         if (ret < 0)
         {
             unlock();
-            LOG_ERR("fs_unmount failed: %d", ret);
+            LOG_ERR("fs_unmount of %s failed: %d", mnt_point, ret);
             return ret;
         }
-        mounted = false;
+        m->mounted = false;
     }
 
-    LOG_WRN("Formatting %s.", mountpoint->mnt_point);
-    ret = fs_mkfs(mountpoint->type, (uintptr_t)mountpoint->storage_dev,
-        mountpoint->fs_data, mountpoint->flags);
+    /* littlefs formats with the configuration of the mount. Other file
+       systems take their own format parameters; NULL selects the defaults. */
+    cfg = (m->mp->type == FS_LITTLEFS) ? m->mp->fs_data : NULL;
+
+    LOG_WRN("Formatting %s.", mnt_point);
+    ret = fs_mkfs(m->mp->type, (uintptr_t)m->mp->storage_dev, cfg,
+        m->mp->flags);
     if (ret == 0)
     {
-        ret = fs_mount(mountpoint);
-        mounted = (ret == 0);
+        ret = mount_one(m);
     }
     unlock();
 
     CHECK_COND_RETURN_MSG(ret < 0, ret, "format failed");
 
-    LOG_INF("Formatted and mounted %s.", mountpoint->mnt_point);
+    LOG_INF("Formatted and mounted %s.", mnt_point);
     return 0;
 }
 
 /******************************************************************************
     [docimport FsApi_init]
 *//**
-    @brief Initializes the handle pools and mounts the file system. A mount
-    failure formats the partition, unless the fstab node sets no-format.
-    @return 0 on success, negative errno on failure.
+    @brief Initializes the handle pools. Registers and mounts every enabled
+    zephyr,fstab,littlefs node. A mount failure formats the partition, unless
+    the node sets no-format. Call FsApi_addMount afterwards for other mounts.
+    @return 0 on success, or the first mount error. A failed mount does not
+      stop the other mounts.
 ******************************************************************************/
 int
 FsApi_init(void)
 {
-    int ret;
+    int ret = 0;
     int k;
 
     lock();
@@ -739,21 +906,23 @@ FsApi_init(void)
         fs_dir_t_init(&dirs[k]);
         dirs_inuse[k] = false;
     }
-    unlock();
+    num_mounts = 0;
 
-    lock();
-    ret = fs_mount(mountpoint);
-    if (ret == -EBUSY)
+#if DT_HAS_COMPAT_STATUS_OKAY(FSTAB_COMPAT)
+    for (k = 0; k < ARRAY_SIZE(fstab_mounts); k++)
     {
-        /* The fstab node sets automount, so the fs is already mounted. */
-        LOG_INF("%s is already mounted.", mountpoint->mnt_point);
-        ret = 0;
+        int res;
+
+        mounts[num_mounts].mp = fstab_mounts[k];
+        res = mount_one(&mounts[num_mounts]);
+        num_mounts++;
+        if ((res < 0) && (ret == 0))
+        {
+            ret = res;
+        }
     }
-    mounted = (ret == 0);
+#endif
     unlock();
 
-    CHECK_COND_RETURN_MSG(ret < 0, ret, "fs_mount failed");
-
-    LOG_INF("Mounted %s.", mountpoint->mnt_point);
-    return 0;
+    return ret;
 }

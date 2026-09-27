@@ -1,10 +1,10 @@
 # File system for the FsApi module. boards/<board>.overlay supplies the
-# partition and the fsapi_lfs fstab node. conf/modules.conf enables FSAPI and
+# partition and the /flash fstab node. conf/modules.conf enables FSAPI and
 # the Zephyr file system symbols it depends on.
 CONFIG_FLASH=y
 CONFIG_FLASH_MAP=y
 
-# Must be >= cache-size in the fsapi_lfs fstab node. littlefs sizes its file
+# Must be >= cache-size in the fstab node. littlefs sizes its file
 # cache heap from this value, so a smaller value fails the second open with
 # -ENOMEM. FsApi checks this at build time.
 CONFIG_FS_LITTLEFS_CACHE_SIZE=256

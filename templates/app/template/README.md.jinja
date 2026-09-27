@@ -87,7 +87,7 @@ Build the host-side protobuf bindings with `make proto`.
 {% if 'FsApi' in modules %}
 ## File system
 
-`src/FsApi.c` mounts littlefs at `/lfs` through the `FsApi` module
+`src/FsApi.c` mounts littlefs at `/flash` through the `FsApi` module
 (`common/modules/FsApi/README.md`). The first mount formats the partition.
 {%- if use_rpc %}
 `src/rpc.c` registers the `FsApiRpc` callset as id 2. `fsapi-cli` gives remote
@@ -95,11 +95,11 @@ access (`python/fsapi/README.md`):
 
 ```bash
 fsapi-cli --ip <device-ip> df
-fsapi-cli --ip <device-ip> tree /lfs
+fsapi-cli --ip <device-ip> tree /flash
 ```
 {%- endif %}
 
-`boards/<board>.overlay` holds the fs partition and the `fsapi_lfs` fstab
+`boards/<board>.overlay` holds the fs partition and the `/flash` fstab
 node. The partition size is {{ fs_size_kb }} KiB. `APP_LFS_SIZE` in the overlay
 sets it. To change the size for one build, give the value in bytes:
 

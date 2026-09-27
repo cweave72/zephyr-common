@@ -65,9 +65,79 @@ fill_info(fsapi_FileInfo *info, const struct fs_dirent *entry)
 }
 
 /******************************************************************************
+    mount_of
+*//**
+    @brief Returns the mount point which holds a path: the longest mount point
+    which is a prefix of the path at a '/' boundary. Returns "" if none.
+******************************************************************************/
+static const char *
+mount_of(const char *path)
+{
+    const char *best = "";
+    size_t best_len = 0;
+    int k;
+
+    for (k = 0; k < FsApi_getMountCount(); k++)
+    {
+        const char *mnt = FsApi_getMountPoint(k);
+        size_t len = strlen(mnt);
+
+        if ((len > best_len) && (strncmp(path, mnt, len) == 0) &&
+            ((path[len] == '\0') || (path[len] == '/')))
+        {
+            best = mnt;
+            best_len = len;
+        }
+    }
+    return best;
+}
+
+/******************************************************************************
+    listmounts_handler
+
+    Call params:
+    Reply params:
+        reply->result: sint32
+        reply->mount_points: string[]
+*//**
+    @brief Implements the RPC listmounts handler.
+******************************************************************************/
+static void
+listmounts_handler(void *call_frame, void *reply_frame, StatusEnum *status)
+{
+    fsapi_Callset *reply_msg = (fsapi_Callset *)reply_frame;
+    fsapi_ListMounts_reply *reply = &reply_msg->msg.listmounts_reply;
+    const int max = ARRAY_SIZE(reply->mount_points);
+    int num = FsApi_getMountCount();
+    int k;
+
+    (void)call_frame;
+
+    LOG_DBG("In listmounts handler");
+
+    reply_msg->which_msg = fsapi_Callset_listmounts_reply_tag;
+    *status = StatusEnum_RPC_SUCCESS;
+
+    memset(reply, 0, sizeof(*reply));
+    if (num > max)
+    {
+        LOG_WRN("%d mounts; the reply holds %d.", num, max);
+        num = max;
+    }
+    for (k = 0; k < num; k++)
+    {
+        strncpy(reply->mount_points[k], FsApi_getMountPoint(k),
+            sizeof(reply->mount_points[k]) - 1);
+    }
+    reply->mount_points_count = num;
+    reply->result = num;
+}
+
+/******************************************************************************
     getfsinfo_handler
 
     Call params:
+        call->path: string
     Reply params:
         reply->result: sint32
         reply->mount_point: string
@@ -80,11 +150,11 @@ fill_info(fsapi_FileInfo *info, const struct fs_dirent *entry)
 static void
 getfsinfo_handler(void *call_frame, void *reply_frame, StatusEnum *status)
 {
+    fsapi_Callset *call_msg = (fsapi_Callset *)call_frame;
     fsapi_Callset *reply_msg = (fsapi_Callset *)reply_frame;
+    fsapi_GetFsInfo_call *call = &call_msg->msg.getfsinfo_call;
     fsapi_GetFsInfo_reply *reply = &reply_msg->msg.getfsinfo_reply;
     struct fs_statvfs stat;
-
-    (void)call_frame;
 
     LOG_DBG("In getfsinfo handler");
 
@@ -92,10 +162,10 @@ getfsinfo_handler(void *call_frame, void *reply_frame, StatusEnum *status)
     *status = StatusEnum_RPC_SUCCESS;
 
     memset(reply, 0, sizeof(*reply));
-    strncpy(reply->mount_point, FsApi_getMountPoint(),
+    strncpy(reply->mount_point, mount_of(call->path),
         sizeof(reply->mount_point) - 1);
 
-    reply->result = FsApi_getInfo(&stat);
+    reply->result = FsApi_getInfo(call->path, &stat);
     if (reply->result == 0)
     {
         reply->block_size = stat.f_frsize;
@@ -504,6 +574,7 @@ mkdir_handler(void *call_frame, void *reply_frame, StatusEnum *status)
     format_handler
 
     Call params:
+        call->path: string
     Reply params:
         reply->result: sint32
 *//**
@@ -512,17 +583,17 @@ mkdir_handler(void *call_frame, void *reply_frame, StatusEnum *status)
 static void
 format_handler(void *call_frame, void *reply_frame, StatusEnum *status)
 {
+    fsapi_Callset *call_msg = (fsapi_Callset *)call_frame;
     fsapi_Callset *reply_msg = (fsapi_Callset *)reply_frame;
+    fsapi_Format_call *call = &call_msg->msg.format_call;
     fsapi_Format_reply *reply = &reply_msg->msg.format_reply;
-
-    (void)call_frame;
 
     LOG_DBG("In format handler");
 
     reply_msg->which_msg = fsapi_Callset_format_reply_tag;
     *status = StatusEnum_RPC_SUCCESS;
 
-    reply->result = FsApi_format();
+    reply->result = FsApi_format(call->path);
 }
 
 static ProtoRpc_Handler_Entry handlers[] = {
@@ -540,6 +611,7 @@ static ProtoRpc_Handler_Entry handlers[] = {
     PROTORPC_ADD_HANDLER(fsapi_Callset_rename_call_tag, rename_handler),
     PROTORPC_ADD_HANDLER(fsapi_Callset_mkdir_call_tag, mkdir_handler),
     PROTORPC_ADD_HANDLER(fsapi_Callset_format_call_tag, format_handler),
+    PROTORPC_ADD_HANDLER(fsapi_Callset_listmounts_call_tag, listmounts_handler),
 };
 
 #define NUM_HANDLERS    PROTORPC_ARRAY_LENGTH(handlers)

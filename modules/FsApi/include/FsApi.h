@@ -3,12 +3,14 @@
  *
  *  @brief: Handle-based file system API over the Zephyr VFS and littlefs.
  *
- *  The module mounts the zephyr,fstab,littlefs node with the nodelabel
- *  fsapi_lfs. Files and directories are referenced by integer handles, so a
- *  remote client (see FsApiRpc) can keep them open across calls.
+ *  FsApi manages a table of mounts. FsApi_init mounts every enabled
+ *  zephyr,fstab,littlefs node. FsApi_addMount adds any other mount, for
+ *  example littlefs on a RAM disk. Files and directories are referenced by
+ *  integer handles, so a remote client (see FsApiRpc) can keep them open
+ *  across calls.
  *
  *  All paths are absolute VFS paths which include the mount point, for
- *  example "/lfs/logs/a.txt". All functions return a negative errno on
+ *  example "/flash/logs/a.txt". All functions return a negative errno on
  *  failure.
 *******************************************************************************/
 #ifndef FSAPI_H
@@ -28,41 +30,69 @@
 /******************************************************************************
     [docexport FsApi_init]
 *//**
-    @brief Initializes the handle pools and mounts the file system. A mount
-    failure formats the partition, unless the fstab node sets no-format.
-    @return 0 on success, negative errno on failure.
+    @brief Initializes the handle pools. Registers and mounts every enabled
+    zephyr,fstab,littlefs node. A mount failure formats the partition, unless
+    the node sets no-format. Call FsApi_addMount afterwards for other mounts.
+    @return 0 on success, or the first mount error. A failed mount does not
+      stop the other mounts.
 ******************************************************************************/
 int
 FsApi_init(void);
 
 /******************************************************************************
-    [docexport FsApi_format]
+    [docexport FsApi_addMount]
 *//**
-    @brief Formats the file system and mounts it again. All data is lost.
-    Closes all open handles first. Works also when the mount failed, for
-    example on a corrupted file system.
-    @return 0 on success, negative errno on failure.
+    @brief Registers a mount and mounts it. Use it for a file system which no
+    fstab node describes, for example littlefs on a RAM disk. Call it after
+    FsApi_init. The mount descriptor must stay valid while FsApi runs.
+    @param[in] mp  The Zephyr mount descriptor.
+    @return 0 on success, negative errno on failure. -ENOMEM if the mount
+      table is full, -EEXIST if the mount point is already registered.
 ******************************************************************************/
 int
-FsApi_format(void);
+FsApi_addMount(struct fs_mount_t *mp);
+
+/******************************************************************************
+    [docexport FsApi_getMountCount]
+*//**
+    @brief Returns the number of registered mounts.
+******************************************************************************/
+int
+FsApi_getMountCount(void);
+
+/******************************************************************************
+    [docexport FsApi_format]
+*//**
+    @brief Formats one file system and mounts it again. All its data is lost.
+    Closes the open handles on that file system first. Works also when the
+    mount failed, for example on a corrupted file system.
+    @param[in] mnt_point  The mount point, for example "/flash".
+    @return 0 on success, negative errno on failure. -ENOENT if no mount has
+      this mount point.
+******************************************************************************/
+int
+FsApi_format(const char *mnt_point);
 
 /******************************************************************************
     [docexport FsApi_getMountPoint]
 *//**
-    @brief Returns the mount point of the file system, for example "/lfs".
+    @brief Returns the mount point of a registered mount, for example "/flash".
+    @param[in] idx  The mount index, 0 to FsApi_getMountCount() - 1.
+    @return The mount point, or NULL if idx is out of range.
 ******************************************************************************/
 const char *
-FsApi_getMountPoint(void);
+FsApi_getMountPoint(int idx);
 
 /******************************************************************************
     [docexport FsApi_getInfo]
 *//**
-    @brief Gets the volume statistics of the file system.
+    @brief Gets the volume statistics of the file system which holds a path.
+    @param[in] path  A mount point or any path on the file system.
     @param[out] stat  Pointer to the statistics output.
     @return 0 on success, negative errno on failure.
 ******************************************************************************/
 int
-FsApi_getInfo(struct fs_statvfs *stat);
+FsApi_getInfo(const char *path, struct fs_statvfs *stat);
 
 /******************************************************************************
     [docexport FsApi_open]

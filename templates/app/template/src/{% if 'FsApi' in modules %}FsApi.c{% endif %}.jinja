@@ -3,9 +3,11 @@
  *
  *  @brief: App-level init for the FsApi module.
  *
- *  app_FsApi_init() mounts the littlefs file system described by the fsapi_lfs
- *  fstab node in boards/<board>.overlay, and logs its size. The file example
- *  is inert behind #if 0. See common/modules/FsApi/README.md.
+ *  app_FsApi_init() mounts every zephyr,fstab,littlefs node in
+ *  boards/<board>.overlay (/flash), and logs the size of each mount. Register
+ *  other mounts, for example littlefs on a RAM disk, with FsApi_addMount after
+ *  FsApi_init. The file example is inert behind #if 0. See
+ *  common/modules/FsApi/README.md.
 *******************************************************************************/
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -20,6 +22,7 @@ app_FsApi_init(void)
 {
     struct fs_statvfs stat;
     int ret;
+    int k;
 
     ret = FsApi_init();
     if (ret < 0)
@@ -28,23 +31,26 @@ app_FsApi_init(void)
         return ret;
     }
 
-    ret = FsApi_getInfo(&stat);
-    if (ret < 0)
+    for (k = 0; k < FsApi_getMountCount(); k++)
     {
-        LOG_ERR("FsApi_getInfo failed: %d", ret);
-        return ret;
-    }
+        const char *mnt = FsApi_getMountPoint(k);
 
-    LOG_INF("%s: %lu blocks of %lu B; %lu free.", FsApi_getMountPoint(),
-        stat.f_blocks, stat.f_frsize, stat.f_bfree);
+        ret = FsApi_getInfo(mnt, &stat);
+        if (ret < 0)
+        {
+            LOG_ERR("FsApi_getInfo(%s) failed: %d", mnt, ret);
+            continue;
+        }
+        LOG_INF("%s: %lu blocks of %lu B; %lu free.", mnt, stat.f_blocks,
+            stat.f_frsize, stat.f_bfree);
+    }
 
 #if 0   /* TODO: enable and adapt. */
     {
-        char path[64];
+        static const char path[] = "/flash/boot.log";
         static const char msg[] = "boot\n";
         ssize_t num;
 
-        snprintk(path, sizeof(path), "%s/boot.log", FsApi_getMountPoint());
         num = FsApi_writeFile(path, 0, msg, sizeof(msg) - 1,
             FS_O_CREATE | FS_O_APPEND);
         if (num < 0)
