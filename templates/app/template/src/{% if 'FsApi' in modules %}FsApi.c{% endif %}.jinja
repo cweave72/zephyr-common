@@ -3,19 +3,51 @@
  *
  *  @brief: App-level init for the FsApi module.
  *
- *  app_FsApi_init() mounts every zephyr,fstab,littlefs node in
- *  boards/<board>.overlay (/flash), and logs the size of each mount. Register
- *  other mounts, for example littlefs on a RAM disk, with FsApi_addMount after
- *  FsApi_init. The file example is inert behind #if 0. See
- *  common/modules/FsApi/README.md.
+ *  app_FsApi_init() initializes FsApi
+{%- if fs_size_kb %}, which mounts the /flash fstab node in
+ *  boards/<board>.overlay
+{%- endif %}
+{%- if ram_disk_kb %}. It adds the /ram mount: littlefs on the
+ *  ramdisk0 RAM disk
+{%- endif %}. It logs the size of each mount. The file example is
+ *  inert behind #if 0. See common/modules/FsApi/README.md.
 *******************************************************************************/
 #include <zephyr/kernel.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/logging/log.h>
+{%- if ram_disk_kb %}
+#include <zephyr/fs/littlefs.h>
+{%- endif %}
 
 #include "FsApi.h"
 #include "app.h"
 
 LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
+
+{%- if fs_size_kb %}
+/* FsApi mounts any number of fstab nodes, including none. This app expects
+   /flash, so stop the build when the board overlay has no fstab node, for
+   example when the flash template in the overlay is not filled in. */
+BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(zephyr_fstab_littlefs),
+    "No zephyr,fstab,littlefs node. Fill in the FsApi template in "
+    "boards/<board>.overlay.");
+{%- endif %}
+{%- if ram_disk_kb %}
+
+/* littlefs on the RAM disk "RAM" (ramdisk0 in boards/<board>.overlay). On a
+   disk, littlefs uses one sector (512 B) as the block, read, prog and cache
+   size, and needs a lookahead of 4 blocks. CONFIG_FS_LITTLEFS_CACHE_SIZE in
+   conf/fs.conf must be >= the cache size. */
+FS_LITTLEFS_DECLARE_CUSTOM_CONFIG(ram_lfs, 4, 512, 512, 512, 2048);
+
+static struct fs_mount_t ram_mnt = {
+    .type = FS_LITTLEFS,
+    .fs_data = &ram_lfs,
+    .storage_dev = (void *)"RAM",
+    .mnt_point = "/ram",
+    .flags = FS_MOUNT_FLAG_USE_DISK_ACCESS,
+};
+{%- endif %}
 
 int
 app_FsApi_init(void)
@@ -24,12 +56,22 @@ app_FsApi_init(void)
     int ret;
     int k;
 
+    /* A failed fstab mount does not stop the other mounts: FsApi_init still
+       sets up the handle pools. */
     ret = FsApi_init();
     if (ret < 0)
     {
         LOG_ERR("FsApi_init failed: %d", ret);
-        return ret;
     }
+{%- if ram_disk_kb %}
+
+    /* The RAM disk is empty after a reset, so this mount formats it. */
+    ret = FsApi_addMount(&ram_mnt);
+    if (ret < 0)
+    {
+        LOG_ERR("Mount of %s failed: %d", ram_mnt.mnt_point, ret);
+    }
+{%- endif %}
 
     for (k = 0; k < FsApi_getMountCount(); k++)
     {
@@ -47,7 +89,7 @@ app_FsApi_init(void)
 
 #if 0   /* TODO: enable and adapt. */
     {
-        static const char path[] = "/flash/boot.log";
+        static const char path[] = "{{ '/flash' if fs_size_kb else '/ram' }}/boot.log";
         static const char msg[] = "boot\n";
         ssize_t num;
 

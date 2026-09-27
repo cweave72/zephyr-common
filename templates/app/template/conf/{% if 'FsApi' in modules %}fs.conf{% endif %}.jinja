@@ -1,13 +1,36 @@
-# File system for the FsApi module. boards/<board>.overlay supplies the
-# partition and the /flash fstab node. conf/modules.conf enables FSAPI and
-# the Zephyr file system symbols it depends on.
+# File system for the FsApi module. conf/modules.conf enables FSAPI and the
+# Zephyr file system symbols it depends on.
+{%- if fs_size_kb %}
+
+# /flash: boards/<board>.overlay supplies the partition and the fstab node.
 CONFIG_FLASH=y
 CONFIG_FLASH_MAP=y
+{%- endif %}
+{%- if ram_disk_kb %}
+
+# littlefs on the RAM disk (/ram, see src/FsApi.c).
+CONFIG_DISK_ACCESS=y
+CONFIG_DISK_DRIVER_RAM=y
+CONFIG_FS_LITTLEFS_BLK_DEV=y
+
+{%- if fs_size_kb %}
+
+# Size of each open file cache. It must be >= the cache of each mount: the
+# fstab node cache-size (256) for /flash, and one 512 B disk sector for /ram.
+{%- else %}
+
+# Size of each open file cache. It must be >= the cache of /ram: one 512 B
+# disk sector.
+{%- endif %}
+# A smaller value makes an open fail with -ENOMEM.
+CONFIG_FS_LITTLEFS_CACHE_SIZE=512
+{%- else %}
 
 # Must be >= cache-size in the fstab node. littlefs sizes its file
 # cache heap from this value, so a smaller value fails the second open with
 # -ENOMEM. FsApi checks this at build time.
 CONFIG_FS_LITTLEFS_CACHE_SIZE=256
+{%- endif %}
 {%- if use_rpc %}
 
 # Remote access to the file system (FsApiRpc callset, registered in src/rpc.c).

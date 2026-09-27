@@ -101,10 +101,19 @@ echoserver_transport:
   choices: [udp, tcp]
   when: "{{ 'EchoServer' in modules }}"
 
-# Size of the FsApi littlefs partition in KiB. app_gen writes the partition
-# into boards/<board>.overlay from this value (see boards.FS_LAYOUTS).
+# Size of the FsApi littlefs flash partition (/flash) in KiB. 0 means no flash
+# file system. app_gen writes the partition into boards/<board>.overlay from
+# this value (see boards.FS_LAYOUTS).
 fs_size_kb:
   type: int
-  help: FsApi file system size in KiB (a multiple of the 4 KiB erase block)
+  help: FsApi flash file system (/flash) size in KiB (a multiple of the 4 KiB erase block; 0 = none)
   default: 128
+  when: "{{ 'FsApi' in modules }}"
+
+# Size of the FsApi RAM disk (/ram) in KiB. 0 means no RAM disk. app_gen writes
+# the ramdisk0 node into boards/<board>.overlay from this value.
+ram_disk_kb:
+  type: int
+  help: FsApi RAM disk size in KiB (0 = no RAM disk)
+  default: 0
   when: "{{ 'FsApi' in modules }}"

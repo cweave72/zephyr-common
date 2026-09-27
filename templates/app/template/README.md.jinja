@@ -87,28 +87,45 @@ Build the host-side protobuf bindings with `make proto`.
 {% if 'FsApi' in modules %}
 ## File system
 
-`src/FsApi.c` mounts littlefs at `/flash` through the `FsApi` module
-(`common/modules/FsApi/README.md`). The first mount formats the partition.
+`src/FsApi.c` mounts littlefs through the `FsApi` module
+(`common/modules/FsApi/README.md`):
+{% if fs_size_kb %}
+- `/flash`: a {{ fs_size_kb }} KiB flash partition. Data stays across a reset.
+{%- endif %}
+{%- if ram_disk_kb %}
+- `/ram`: a {{ ram_disk_kb }} KiB RAM disk. Data is lost at reset.
+{%- endif %}
 {%- if use_rpc %}
+
 `src/rpc.c` registers the `FsApiRpc` callset as id 2. `fsapi-cli` gives remote
 access (`python/fsapi/README.md`):
 
 ```bash
 fsapi-cli --ip <device-ip> df
-fsapi-cli --ip <device-ip> tree /flash
+fsapi-cli --ip <device-ip> tree {{ '/flash' if fs_size_kb else '/ram' }}
 ```
 {%- endif %}
+{%- if fs_size_kb %}
 
-`boards/<board>.overlay` holds the fs partition and the `/flash` fstab
-node. The partition size is {{ fs_size_kb }} KiB. `APP_LFS_SIZE` in the overlay
-sets it. To change the size for one build, give the value in bytes:
+`boards/<board>.overlay` holds the flash partition and the `/flash` fstab
+node. The first mount formats the partition. `APP_LFS_SIZE` in the overlay
+sets the size. To change the size for one build, give the value in bytes:
 
 ```bash
 make BOARD=<board> PRISTINE=y build CMAKE_OPTS="-DDTS_EXTRA_CPPFLAGS=-DAPP_LFS_SIZE=0x40000"
 ```
 
 For a board without a known flash layout, the overlay holds a commented
-template. Fill it in, or the build stops with an FsApi error.
+template. Fill it in, or `src/FsApi.c` stops the build.
+{%- endif %}
+{%- if ram_disk_kb %}
+
+`/ram` is littlefs on the `ramdisk0` RAM disk in `boards/<board>.overlay`.
+`src/FsApi.c` defines the mount and adds it with `FsApi_addMount`. Each boot
+formats `/ram`. The RAM disk costs its size in RAM, plus about 6 KiB for
+littlefs buffers. To change the size, change `sector-count` (512 B sectors)
+in the overlay.
+{%- endif %}
 {% endif %}
 {% if use_led %}
 ## LED
