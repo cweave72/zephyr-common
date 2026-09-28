@@ -286,11 +286,13 @@ The function uses one file handle. A nanopb input stream reads the file in
 small pieces through `FsApi_read`, so it needs no buffer for the file.
 `Pb_unpack_stream` (PbGeneric) does the decode.
 
-Put the `.proto` in the application `proto/` directory, or in the workspace
-`proto/` directory if more applications use it. Add the directory to
+Put the `.proto` in the workspace `proto/` directory
+(`proto/<Name>/<Name>.proto`), or in the application `proto/` directory if
+only one application uses it. Add an application `proto/` directory to
 `nanopb_build_sources` in the application `CMakeLists.txt`. `fsapi-brand`
-finds the same `.proto` for the `.pb.yaml` file. See `applications/fs_demo`
-(`proto/NetConf.proto`, `src/net_ip.c`).
+finds the same `.proto` for the `.pb.yaml` file. For example, `NetConf`
+(`proto/NetConf/NetConf.proto`) is the network configuration of
+`applications/fs_demo` (`src/net_ip.c`).
 
 ## Remote access (FsApiRpc)
 
