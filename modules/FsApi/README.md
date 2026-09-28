@@ -62,17 +62,18 @@ holds the mutex, thus two threads can use FsApi at the same time.
 
 ## Kconfig
 
-| Symbol                 | Default | Description                                    |
-|------------------------|---------|------------------------------------------------|
-| `FSAPI`                | n       | Enables the FsApi library.                     |
-| `FSAPI_MAX_MOUNTS`     | 2       | Size of the mount table: fstab nodes + others. |
-| `FSAPI_MAX_OPEN_FILES` | 4       | Number of file handles, for all mounts.        |
-| `FSAPI_MAX_OPEN_DIRS`  | 2       | Number of directory handles, for all mounts.   |
-| `FSAPIRPC`             | n       | Enables the FsApiRpc callset.                  |
+| Symbol                 | Default | Description                                        |
+|------------------------|---------|----------------------------------------------------|
+| `FSAPI`                | n       | Enables the FsApi library.                         |
+| `FSAPI_MAX_MOUNTS`     | 2       | Size of the mount table: fstab nodes + others.     |
+| `FSAPI_MAX_OPEN_FILES` | 4       | Number of file handles, for all mounts.            |
+| `FSAPI_MAX_OPEN_DIRS`  | 2       | Number of directory handles, for all mounts.       |
+| `FSAPI_PB`             | n       | Enables `FsApi_unpack_file` (protobuf blob files). |
+| `FSAPIRPC`             | n       | Enables the FsApiRpc callset.                      |
 
 `FSAPI` depends on `FILE_SYSTEM`, `FILE_SYSTEM_LITTLEFS` and
-`FILE_SYSTEM_MKFS`. `FSAPIRPC` depends on `FSAPI`, `NANOPB`, `PBGENERIC` and
-`PROTORPC`. Kconfig does not enable a dependency. Set each one in the
+`FILE_SYSTEM_MKFS`. `FSAPI_PB` depends on `FSAPI`, `NANOPB` and `PBGENERIC`.
+`FSAPIRPC` depends on `FSAPI`, `NANOPB`, `PBGENERIC` and `PROTORPC`. Kconfig does not enable a dependency. Set each one in the
 application conf file. An unmet dependency removes the symbol with only a
 warning.
 
@@ -205,7 +206,7 @@ ret = FsApi_format("/ram");
 ## Branding
 
 Branding writes files into a flash file system at build time, for example
-configuration files such as `/flash/etc/config/net.conf`. It is a separate
+configuration files such as `/flash/etc/config/net.pb`. It is a separate
 step from a firmware flash.
 
 | Step                     | Tool                              | Output                                             |
@@ -222,8 +223,9 @@ sizes. The image thus always has the geometry of the firmware.
 
 **Image.** `fsapi-brand` (`python/fsapi`) builds a littlefs image of the whole
 partition from a directory. The directory maps to the mount root:
-`brand/default/etc/config/net.conf` becomes `/flash/etc/config/net.conf`. Dot
-files are skipped. The tool writes littlefs on-disk format 2.1, the format of
+`brand/default/etc/bootmsg.txt` becomes `/flash/etc/bootmsg.txt`. Dot
+files are skipped. A `<name>.pb.yaml` file becomes the protobuf blob
+`<name>.pb`. See [Protobuf blobs](#protobuf-blobs). The tool writes littlefs on-disk format 2.1, the format of
 the device littlefs (v2.9). After it writes the image, the tool mounts the
 image again and compares each file.
 
@@ -249,6 +251,46 @@ BRAND_FLASH_ARGS = --bin-file build/brand/brand.bin \
 
 The esp32s3 boards have no flash fs partition yet. See the FsApi layouts in
 `python/app_generator/README.md`.
+
+## Protobuf blobs
+
+A blob file holds one raw protobuf message, with no header. Branding writes
+blob files from `.pb.yaml` files, and `fsapi-cli pbput` replaces them on a
+running device (see "Protobuf blobs" in `python/fsapi/README.md`).
+`FsApi_unpack_file` (`CONFIG_FSAPI_PB`, `FsApiPb.h`) reads a blob file into
+the nanopb struct of the message:
+
+```c
+#include "FsApiPb.h"
+#include "NetConf.pb.h"
+
+static netconf_NetConf conf;
+
+ret = FsApi_unpack_file("/flash/etc/config/net.pb", &conf,
+    netconf_NetConf_fields);
+if (ret != 0)
+{
+    /* A failed decode can leave part of the data. */
+    conf = (netconf_NetConf)netconf_NetConf_init_zero;
+}
+```
+
+| Return               | Meaning                                                       |
+|----------------------|---------------------------------------------------------------|
+| 0                    | The struct holds the message.                                 |
+| `-ENOENT`            | The file does not exist. Use the default values.              |
+| `-EBADMSG`           | The file is not a valid message. The function logs a warning. |
+| Other negative errno | A file system error, for example `-EMFILE`.                   |
+
+The function uses one file handle. A nanopb input stream reads the file in
+small pieces through `FsApi_read`, so it needs no buffer for the file.
+`Pb_unpack_stream` (PbGeneric) does the decode.
+
+Put the `.proto` in the application `proto/` directory, or in the workspace
+`proto/` directory if more applications use it. Add the directory to
+`nanopb_build_sources` in the application `CMakeLists.txt`. `fsapi-brand`
+finds the same `.proto` for the `.pb.yaml` file. See `applications/fs_demo`
+(`proto/NetConf.proto`, `src/net_ip.c`).
 
 ## Remote access (FsApiRpc)
 

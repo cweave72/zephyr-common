@@ -110,3 +110,28 @@ Pb_unpack_delimited(
     }
     return status;
 }
+
+/******************************************************************************
+    [docimport Pb_unpack_stream]
+*//**
+    @brief Unpacks a protobuf message from a stream. The message ends at the
+    end of the stream: set stream->bytes_left to the message length.
+    @param[in] stream  Pointer to stream context. The stream callback reads
+      the data, for example from a file.
+    @param[in] target  Pointer to the target struct to unpack into.
+    @param[in] fields  Pointer to the protobuf message fields object.
+    @return Returns true on success; false on failure.
+******************************************************************************/
+bool
+Pb_unpack_stream(
+    pb_istream_t *stream,
+    void *target,
+    const void *fields)
+{
+    bool status = pb_decode(stream, (pb_msgdesc_t *)fields, target);
+    if (!status)
+    {
+        LOG_ERR("pb_decode failure: %s", PB_GET_ERROR(stream));
+    }
+    return status;
+}

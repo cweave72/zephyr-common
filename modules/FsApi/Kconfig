@@ -36,6 +36,15 @@ config FSAPI_MAX_OPEN_DIRS
 
 endif # FSAPI
 
+config FSAPI_PB
+	bool "Enable FsApi_unpack_file for protobuf blob files"
+	depends on FSAPI
+	depends on NANOPB
+	depends on PBGENERIC
+	help
+	  FsApi_unpack_file reads a protobuf blob file into a nanopb struct.
+	  Branding (fsapi-brand) writes blob files from .pb.yaml files.
+
 config FSAPIRPC
 	bool "Enable the FsApiRpc callset"
 	depends on FSAPI
