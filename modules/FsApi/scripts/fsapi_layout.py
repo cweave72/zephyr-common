@@ -8,11 +8,14 @@ of the firmware.
 
 Usage: fsapi_layout.py --edt-pickle <build>/zephyr/edt.pickle --out <file>
 """
+from __future__ import annotations
+
 import argparse
 import json
 import os
 import pickle
 import sys
+from typing import Any
 
 # edt.pickle holds objects from Zephyr's devicetree package.
 sys.path.insert(0, os.path.join(os.environ.get("ZEPHYR_BASE", ""), "scripts",
@@ -21,8 +24,17 @@ sys.path.insert(0, os.path.join(os.environ.get("ZEPHYR_BASE", ""), "scripts",
 COMPAT = "zephyr,fstab,littlefs"
 
 
-def mount_entry(node):
-    """-> the layout of one fstab node."""
+def mount_entry(node: Any) -> dict[str, Any]:
+    """Makes the layout entry of one fstab node.
+
+    Args:
+        node: The devicetree Node of a zephyr,fstab,littlefs node. The type
+            is devicetree.edtlib.Node; the import happens at unpickle time.
+
+    Returns:
+        The mount point, node paths, partition offset and size, flash base
+        address, erase block size and littlefs sizes.
+    """
     part = node.props["partition"].val
     # partition -> partitions -> flash device node.
     flash = part.parent.parent
@@ -44,7 +56,8 @@ def mount_entry(node):
     }
 
 
-def main():
+def main() -> None:
+    """Reads edt.pickle and writes the layout JSON if it changed."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--edt-pickle", required=True)
     parser.add_argument("--out", required=True)
